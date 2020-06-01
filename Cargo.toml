@@ -1,0 +1,9 @@
+[package]
+name = "chemcore"
+version = "0.1.0"
+authors = [""]
+edition = "2018"
+
+[dependencies]
+gamma = "0.1.0"
+purr = "0.3.0"
