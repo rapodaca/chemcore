@@ -1,8 +1,14 @@
 [package]
 name = "chemcore"
 version = "0.1.0"
-authors = [""]
+authors = ["The ChemCore Project Developers"]
+license = "MIT"
 edition = "2018"
+readme = "README.md"
+repository = "https://github.com/rapodaca/chemcore"
+description = """
+A cheminformatics toolkit.
+"""
 
 [dependencies]
 gamma = "0.1.0"
