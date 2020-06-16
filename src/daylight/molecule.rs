@@ -21,7 +21,7 @@ pub struct Molecule {
 impl Molecule {
     pub fn build(smiles: &str) -> Result<Self, Error> {
         let mol = read(smiles).unwrap();
-        let mut edges = vec![];
+        let mut edges = vec![ ];
         let mut neighbors = vec![ ];
 
         for atom in mol.atoms.iter() {

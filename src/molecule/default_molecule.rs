@@ -885,7 +885,7 @@ mod tests {
                 spec::Bond { sid: 0, tid: 1, ..Default::default() }
             ]
         }).unwrap();
-        let neighbors = molecule.neighbors(&0).unwrap().collect::<Vec<_>>();;
+        let neighbors = molecule.neighbors(&0).unwrap().collect::<Vec<_>>();
 
         assert_eq!(neighbors, vec![ &1 ]);
     }
