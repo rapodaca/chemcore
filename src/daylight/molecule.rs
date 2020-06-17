@@ -1,15 +1,9 @@
-use purr::read::read;
+use purr::read::{ read, Error };
 use purr::mol::{ Mol, Atom, Bond, Style, Parity as PurrParity };
 use purr::valence::implicit_hydrogens;
-use gamma::graph::Graph;
-use gamma::graph::Error as GraphError;
-use crate::molecule::{ Element, Parity };
-use crate::molecule::Molecule as IMolecule;
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum Error {
-    
-}
+use gamma::graph::{ Graph, Error as GraphError };
+use crate::molecule::{ Element, Parity, Molecule as IMolecule };
+use super::kekulize;
 
 pub struct Molecule {
     mol: Mol,
@@ -20,13 +14,13 @@ pub struct Molecule {
 
 impl Molecule {
     pub fn build(smiles: &str) -> Result<Self, Error> {
-        let mol = read(smiles).unwrap();
+        let mol = kekulize(read(smiles)?);
         let mut edges = vec![ ];
         let mut neighbors = vec![ ];
 
         for atom in mol.atoms.iter() {
             if atom.aromatic {
-                panic!("Aromatic SMILES not yet supported");
+                panic!("Did not kekulize.");
             }
         }
 
@@ -38,7 +32,7 @@ impl Molecule {
 
                 if let Some(style) = bond.style {
                     if style == Style::Aromatic {
-                        panic!("Aromatic SMILES not yet supported");
+                        panic!("Did not kekulize.");
                     }
                 }
             }
@@ -158,27 +152,27 @@ impl<'a> IMolecule<'a, usize> for Molecule {
         if let Some(hcount) = atom.hcount {
             result = result - hcount as i8;
         } else {
-            let implicit = implicit_hydrogens(id, &self.mol);
-            result = result - implicit.unwrap().unwrap() as i8;
+            // let implicit = implicit_hydrogens(id, &self.mol);
+            let bonds = &self.mol.bonds[*id];
+            let implicit = implicit_hydrogens(&atom, bonds);
+            result = result - implicit.unwrap() as i8;
         }
 
         Ok(result as u8)
     }
 
     fn hydrogens(&self, id: &usize) -> Result<u8, GraphError> {
-        if let Ok(result) = implicit_hydrogens(id, &self.mol) {
-            if let Some(value) = result {
-                Ok(value)
-            } else {
-                let atom = atom_at(id, &self.mol)?;
+        let atom = atom_at(id, &self.mol)?;
+        let bonds = &self.mol.bonds[*id];
 
+        match implicit_hydrogens(atom, bonds) {
+            Some(count) => Ok(count),
+            None => {
                 match atom.hcount {
                     Some(hcount) => Ok(hcount),
                     None => Ok(0)
                 }
             }
-        } else {
-            Err(GraphError::UnknownNode)
         }
     }
 
@@ -194,21 +188,19 @@ impl<'a> IMolecule<'a, usize> for Molecule {
     fn atom_parity(&self, id: &usize) -> Result<Option<Parity>, GraphError> {
         let atom = atom_at(id, &self.mol)?;
 
-        if let Some(parity) = atom.parity {
-            let mut result = match parity {
-                PurrParity::Counterclockwise => Parity::Negative,
-                PurrParity::Clockwise => Parity::Positive
-            };
+        let mut result = match atom.parity {
+            Some(PurrParity::Counterclockwise) => Parity::Negative,
+            Some(PurrParity::Clockwise) => Parity::Positive,
+            None => return Ok(None)
+        };
 
-            if *id != 0 && atom.hcount.is_some() {
-                // result = Parity::negate(result);
+        if let Some(hcount) = atom.hcount {
+            if *id > 0 && hcount > 0 {
                 result = result.negate();
             }
-
-            Ok(Some(result))
-        } else {
-            Ok(None)
         }
+
+        Ok(Some(result))
     }
 
     fn bond_order(&self, sid: &usize, tid: &usize) -> Result<u8, GraphError> {
@@ -319,17 +311,17 @@ fn multiplicity(bond: &Bond) -> u8 {
 mod tests {
     use super::*;
 
-    #[test]
-    #[should_panic(expected = "Aromatic SMILES not yet supported")]
-    fn aromatic_atom() {
-        Molecule::build(&"cc").unwrap();
-    }
+    // #[test]
+    // #[should_panic(expected = "Aromatic SMILES not yet supported")]
+    // fn aromatic_atom() {
+    //     Molecule::build(&"cc").unwrap();
+    // }
 
-    #[test]
-    #[should_panic(expected = "Aromatic SMILES not yet supported")]
-    fn aromatic_bond() {
-        Molecule::build(&"C:C").unwrap();
-    }
+    // #[test]
+    // #[should_panic(expected = "Aromatic SMILES not yet supported")]
+    // fn aromatic_bond() {
+    //     Molecule::build(&"C:C").unwrap();
+    // }
 
     #[test]
     fn element_given_unknown_id() {
@@ -570,38 +562,52 @@ mod tests {
     }
 
     #[test]
-    fn bond_order_given_none() {
+    fn bond_order_given_none_bond() {
         let molecule = Molecule::build(&"CC").unwrap();
 
         assert_eq!(molecule.bond_order(&0, &1), Ok(1));
     }
 
     #[test]
-    fn bond_order_given_single() {
+    fn bond_order_given_none_bond_between_aromatics() {
+        let molecule = Molecule::build(&"cc").unwrap();
+
+        assert_eq!(molecule.bond_order(&0, &1), Ok(2));
+    }
+
+    #[test]
+    fn bond_order_given_single_bond() {
         let molecule = Molecule::build(&"C-C").unwrap();
 
         assert_eq!(molecule.bond_order(&0, &1), Ok(1));
     }
 
     #[test]
-    fn bond_order_given_double() {
+    fn bond_order_given_double_bond() {
         let molecule = Molecule::build(&"C=C").unwrap();
 
         assert_eq!(molecule.bond_order(&0, &1), Ok(2));
     }
 
     #[test]
-    fn bond_order_given_up() {
+    fn bond_order_given_up_bond() {
         let molecule = Molecule::build(&"C/C").unwrap();
 
         assert_eq!(molecule.bond_order(&0, &1), Ok(1));
     }
 
     #[test]
-    fn bond_order_given_down() {
+    fn bond_order_given_down_bond() {
         let molecule = Molecule::build(&"C\\C").unwrap();
 
         assert_eq!(molecule.bond_order(&0, &1), Ok(1));
+    }
+
+    #[test]
+    fn bond_order_given_aromatic_bond() {
+        let molecule = Molecule::build(&"C:C").unwrap();
+
+        assert_eq!(molecule.bond_order(&0, &1), Ok(2));
     }
 
     #[test]
