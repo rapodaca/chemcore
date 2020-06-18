@@ -25,8 +25,12 @@ pub fn kekulize(mol: Mol) -> Mol {
         result.bonds.push(outs.iter().map(|bond| {
             let tid = bond.tid;
 
-            if matching.has_edge(&sid, &tid).unwrap() {
-                Bond { tid, style: Some(Style::Double) }
+            if matching.has_node(&sid) && matching.has_node(&tid) {
+                if matching.has_edge(&sid, &tid).unwrap() {
+                    Bond { tid, style: Some(Style::Double) }
+                } else {
+                    Bond { tid, style: bond.style }
+                }
             } else {
                 Bond { tid, style: bond.style }
             }
@@ -39,7 +43,33 @@ pub fn kekulize(mol: Mol) -> Mol {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use purr::read::read;
+    use purr::mol::Style;
+    use purr::read::{ read, Error };
+
+    #[test]
+    fn aromatic_propane() {
+        let mol = kekulize(read("C:C:C").unwrap());
+
+        assert_eq!(mol, Mol {
+            atoms: vec![
+                Atom { ..Default::default() },
+                Atom { ..Default::default() },
+                Atom { ..Default::default() },
+            ],
+            bonds: vec![ 
+                vec![
+                    Bond { tid: 1, style: Some(Style::Double) }
+                ],
+                vec![
+                    Bond { tid: 0, style: Some(Style::Double) },
+                    Bond { tid: 2, style: Some(Style::Aromatic) }
+                ],
+                vec![
+                    Bond { tid: 1, style: Some(Style::Aromatic) }
+                ]
+            ]
+        })
+    }
 
     #[test]
     fn methane() {

@@ -1,8 +1,8 @@
-use purr::read::{ read, Error };
+use purr::read::{ read };
 use purr::mol::{ Mol, Atom, Bond, Style, Parity as PurrParity };
 use purr::valence::implicit_hydrogens;
 use gamma::graph::{ Graph, Error as GraphError };
-use crate::molecule::{ Element, Parity, Molecule as IMolecule };
+use crate::molecule::{ Element, Parity, Error, Molecule as IMolecule };
 use super::kekulize;
 
 pub struct Molecule {
@@ -20,7 +20,7 @@ impl Molecule {
 
         for atom in mol.atoms.iter() {
             if atom.aromatic {
-                panic!("Did not kekulize.");
+                return Err(Error::CanNotKekulize);
             }
         }
 
@@ -32,7 +32,7 @@ impl Molecule {
 
                 if let Some(style) = bond.style {
                     if style == Style::Aromatic {
-                        panic!("Did not kekulize.");
+                        return Err(Error::CanNotKekulize);
                     }
                 }
             }
@@ -310,18 +310,30 @@ fn multiplicity(bond: &Bond) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use purr::read::Error as PurrError;
 
-    // #[test]
-    // #[should_panic(expected = "Aromatic SMILES not yet supported")]
-    // fn aromatic_atom() {
-    //     Molecule::build(&"cc").unwrap();
-    // }
+    #[test]
+    fn build_given_invalid_character() {
+        let molecule = Molecule::build(&"C?");
 
-    // #[test]
-    // #[should_panic(expected = "Aromatic SMILES not yet supported")]
-    // fn aromatic_bond() {
-    //     Molecule::build(&"C:C").unwrap();
-    // }
+        assert_eq!(
+            molecule.err(), Some(Error::Purr(PurrError::InvalidCharacter(1)))
+        );
+    }
+
+    #[test]
+    fn build_given_methane_aromatic() {
+        let molecule = Molecule::build("c");
+
+        assert_eq!(molecule.err(), Some(Error::CanNotKekulize));
+    }
+
+    #[test]
+    fn build_given_propane_aromatic() {
+        let molecule = Molecule::build("C:C:C");
+
+        assert_eq!(molecule.err(), Some(Error::CanNotKekulize));
+    }
 
     #[test]
     fn element_given_unknown_id() {
