@@ -44,7 +44,7 @@ pub fn kekulize(mol: Mol) -> Mol {
 mod tests {
     use super::*;
     use purr::mol::Style;
-    use purr::read::{ read, Error };
+    use purr::read::{ read };
 
     #[test]
     fn aromatic_propane() {
