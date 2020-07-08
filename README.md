@@ -19,17 +19,21 @@ Parse cyclopropane SMILES and traverse in depth-first order:
 
 ```rust
 use gamma::traversal::depth_first;
-use chemcore::daylight;
+use gamma::graph::Step;
+use chemcore::daylight::read;
+use chemcore::molecule::Error;
 
-fn main() {
-    let molecule = daylight::Molecule::build(&"C1CC1").unwrap();
-    let traversal = depth_first(&molecule, &0).unwrap();
+fn main() -> Result<(), Error> {
+    let molecule = read(&"C1CC1")?;
+    let traversal = depth_first(&molecule, 0).expect("traversal error");
 
     assert_eq!(traversal.collect::<Vec<_>>(), vec![
-        (&0, &2, false),
-        (&2, &1, false),
-        (&1, &0, true)
+        Step::new(0, 2, false),
+        Step::new(2, 1, false),
+        Step::new(1, 0, true)
     ]);
+
+    Ok(())
 }
 ```
 
