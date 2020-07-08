@@ -1,61 +1,61 @@
-use purr::mol::{ Mol, Atom, Style };
-use purr::valence::hypovalence;
-use gamma::graph::StableGraph;
+use purr::mol::{ Atom, Bond, Style };
+use purr::valence::{ hypovalence, Error as ValenceError };
+use gamma::graph::HashGraph;
+use crate::molecule::Error;
 
-pub fn pi_subgraph(mol: &Mol) -> StableGraph<usize, ()> {
-    let mut flags = vec![false; mol.atoms.len()];
+pub fn pi_subgraph(atoms: &[Atom]) -> Result<HashGraph, Error> {
     let mut edges = Vec::new();
+    let mut singletons = Vec::new();
 
-    for (id, atom) in mol.atoms.iter().enumerate() {
-        if eligible(id, &atom, &mol) {
-            std::mem::replace(&mut flags[id], true);
+    for (sid, atom) in atoms.iter().enumerate() {
+        if atom.nub.aromatic && atom.bonds.is_empty() {
+            singletons.push(sid);
         }
     }
 
-    for (sid, _) in mol.atoms.iter().enumerate() {
-        if !flags.get(sid).unwrap() {
-            continue;
-        }
-
-        for bond in mol.bonds.get(sid).unwrap().iter() {
-            let tid = bond.tid;
-
-            if tid > sid {
-                match bond.style {
-                    Some(Style::Aromatic) => {
-                        edges.push((sid, tid, ()));
-                    },
-                    None => {
-                        edges.push((sid, tid, ()));
-                    },
-                    Some(_) => ()
-                }
+    for (sid, atom) in atoms.iter().enumerate() {
+        for Bond { tid, style } in atom.bonds.iter() {
+            if sid < *tid && is_aromatic_bond(sid, *tid, style, atoms)? {
+                edges.push((sid, *tid));
             }
         }
     }
 
-    let nodes = (0..mol.atoms.len()).filter(
-        |id| *flags.get(*id).unwrap()
-    ).collect::<Vec<_>>();
-    
-    StableGraph::build(nodes, edges).unwrap()
+    Ok(HashGraph::from_edges(edges, singletons).expect(
+        "error creating pi subgraph from adjacency"
+    ))
 }
 
-fn eligible(id: usize, atom: &Atom, mol: &Mol) -> bool {
-    let bonds = &mol.bonds[id];
+fn is_aromatic_bond(
+    sid: usize, tid: usize, style: &Option<Style>, atoms: &[Atom]
+) -> Result<bool, Error> {
+    let source = &atoms[sid];
+    let target = &atoms[tid];
 
-    if !atom.aromatic {
-        if !bonds.iter().any(|bond| match bond.style {
-            Some(Style::Aromatic) => true,
-            _ => false
-        }) {
-            return false;
-        }
+    match style {
+        Some(Style::Aromatic) =>
+            Ok(subvalent(sid, atoms)? && subvalent(tid, atoms)?),
+        None => {
+            if source.nub.aromatic && target.nub.aromatic {
+                Ok(subvalent(sid, atoms)? && subvalent(tid, atoms)?)
+            } else {
+                Ok(false)
+            }
+        },
+        _ => Ok(false)
     }
+}
 
-    match hypovalence(atom, bonds) {
-        None => false,
-        Some(value) => value > 0
+fn subvalent(id: usize, atoms: &[Atom]) -> Result<bool, Error> {
+    let atom = &atoms[id];
+
+    match hypovalence(atom) {
+        Ok(result) => match result {
+            Some(hypovalence) => Ok(hypovalence > 0),
+            None => Ok(false)
+        },
+        Err(ValenceError::UnmatchableValence) =>
+            return Err(Error::Hypervalent(id))
     }
 }
 
@@ -63,122 +63,138 @@ fn eligible(id: usize, atom: &Atom, mol: &Mol) -> bool {
 mod tests {
     use super::*;
     use purr::read::read;
-    use gamma::graph::Graph;
+
+    #[test]
+    fn aromatic_methane() {
+        let pi = pi_subgraph(&read("c").unwrap());
+
+        assert_eq!(pi, Ok(HashGraph::from_edges(vec![ ], vec![ 0 ]).unwrap()));
+    }
 
     #[test]
     fn methane() {
         let pi = pi_subgraph(&read("C").unwrap());
 
-        assert_eq!(pi.edges().collect::<Vec<_>>(), vec![ ])
+        assert_eq!(pi, Ok(HashGraph::from_edges(vec![ ], vec![ ]).unwrap()));
     }
 
     #[test]
     fn ethane() {
         let pi = pi_subgraph(&read("CC").unwrap());
 
-        assert_eq!(pi.edges().collect::<Vec<_>>(), vec![ ]);
+        assert_eq!(pi, Ok(HashGraph::from_edges(vec![ ], vec![ ]).unwrap()));
     }
     
     #[test]
     fn ethyne() {
         let pi = pi_subgraph(&read("C#C").unwrap());
 
-        assert_eq!(pi.edges().collect::<Vec<_>>(), vec![ ]);
+        assert_eq!(pi, Ok(HashGraph::from_edges(vec![ ], vec![ ]).unwrap()));
     }
 
     #[test]
     fn ethene_with_aromatic_atoms() {
         let pi = pi_subgraph(&read("cc").unwrap());
 
-        assert_eq!(pi.edges().collect::<Vec<_>>(), vec![
-            (&0, &1)
-        ]);
+        assert_eq!(pi, Ok(HashGraph::from_edges(vec![
+            (0, 1)
+        ], vec![ ]).unwrap()));
     }
 
     #[test]
     fn ethene_with_aromatic_bond() {
         let pi = pi_subgraph(&read("C:C").unwrap());
 
-        assert_eq!(pi.edges().collect::<Vec<_>>(), vec![
-            (&0, &1)
-        ]);
+        assert_eq!(pi, Ok(HashGraph::from_edges(vec![
+            (0, 1)
+        ], vec![ ]).unwrap()));
+    }
+
+    #[test]
+    fn propenyl_radical_with_aromatic_atoms() {
+        let pi = pi_subgraph(&read("ccc").unwrap());
+
+        assert_eq!(pi, Ok(HashGraph::from_edges(vec![
+            (0, 1),
+            (1, 2)
+        ], vec![ ]).unwrap()));
     }
 
     #[test]
     fn pyrrole_with_aromatic_atoms() {
         let pi = pi_subgraph(&read("[nH]1cccc1").unwrap());
 
-        assert_eq!(pi.edges().collect::<Vec<_>>(), vec![
-            (&1, &2),
-            (&2, &3),
-            (&3, &4),
-        ]);
+        assert_eq!(pi, Ok(HashGraph::from_edges(vec![
+            (1, 2),
+            (2, 3),
+            (3, 4)
+        ], vec![ ]).unwrap()));
     }
 
     #[test]
     fn furan_with_aromatic_atoms() {
         let pi = pi_subgraph(&read("o1cccc1").unwrap());
 
-        assert_eq!(pi.edges().collect::<Vec<_>>(), vec![
-            (&1, &2),
-            (&2, &3),
-            (&3, &4),
-        ]);
+        assert_eq!(pi, Ok(HashGraph::from_edges(vec![
+            (1, 2),
+            (2, 3),
+            (3, 4)
+        ], vec![ ]).unwrap()));
     }
 
     #[test]
     fn pyridine_with_aromatic_atoms() {
         let pi = pi_subgraph(&read("c1ccccc1").unwrap());
 
-        assert_eq!(pi.edges().collect::<Vec<_>>(), vec![
-            (&0, &5),
-            (&0, &1),
-            (&1, &2),
-            (&2, &3),
-            (&3, &4),
-            (&4, &5)
-        ]);
+        assert_eq!(pi, Ok(HashGraph::from_edges(vec![
+            (0, 5),
+            (0, 1),
+            (1, 2),
+            (2, 3),
+            (3, 4),
+            (4, 5)
+        ], vec![ ]).unwrap()));
     }
 
     #[test]
     fn pyridine_with_aromatic_bonds() {
         let pi = pi_subgraph(&read("C1:C:C:C:C:C:1").unwrap());
 
-        assert_eq!(pi.edges().collect::<Vec<_>>(), vec![
-            (&0, &5),
-            (&0, &1),
-            (&1, &2),
-            (&2, &3),
-            (&3, &4),
-            (&4, &5)
-        ]);
+        assert_eq!(pi, Ok(HashGraph::from_edges(vec![
+            (0, 5),
+            (0, 1),
+            (1, 2),
+            (2, 3),
+            (3, 4),
+            (4, 5)
+        ], vec![ ]).unwrap()));
     }
 
     #[test]
     fn pyridine_with_bracket_nitrogen() {
         let pi = pi_subgraph(&read("[n]1ccccc1").unwrap());
 
-        assert_eq!(pi.edges().collect::<Vec<_>>(), vec![
-            (&0, &5),
-            (&0, &1),
-            (&1, &2),
-            (&2, &3),
-            (&3, &4),
-            (&4, &5)
-        ]);
+        assert_eq!(pi, Ok(HashGraph::from_edges(vec![
+            (0, 5),
+            (0, 1),
+            (1, 2),
+            (2, 3),
+            (3, 4),
+            (4, 5)
+        ], vec![ ]).unwrap()));
     }
 
     #[test]
     fn pyridine_without_bracket_nitrogen() {
         let pi = pi_subgraph(&read("n1ccccc1").unwrap());
 
-        assert_eq!(pi.edges().collect::<Vec<_>>(), vec![
-            (&0, &5),
-            (&0, &1),
-            (&1, &2),
-            (&2, &3),
-            (&3, &4),
-            (&4, &5)
-        ]);
+        assert_eq!(pi, Ok(HashGraph::from_edges(vec![
+            (0, 5),
+            (0, 1),
+            (1, 2),
+            (2, 3),
+            (3, 4),
+            (4, 5)
+        ], vec![ ]).unwrap()));
     }
 }

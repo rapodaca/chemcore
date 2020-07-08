@@ -1,6 +1,6 @@
 [package]
 name = "chemcore"
-version = "0.1.1"
+version = "0.2.0"
 authors = ["The ChemCore Project Developers"]
 license = "MIT"
 edition = "2018"
@@ -11,5 +11,5 @@ A cheminformatics toolkit.
 """
 
 [dependencies]
-gamma = "0.4.0"
-purr = "0.5.0"
+gamma = "0.6"
+purr = "0.6"

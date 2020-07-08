@@ -1,972 +1,821 @@
-use gamma::graph::Graph;
-use gamma::graph::Error as GraphError;
+use std::collections::HashMap;
 
-use super::spec;
-use super::molecule::Molecule;
-use super::element::Element;
-use super::error::Error;
-use super::atom::Atom;
-use super::parity::Parity;
+use gamma::graph::{ ArrayGraph, Graph, Error as GraphError };
+use super::{ Molecule, Atom, BondOrder, Parity, Element, Error };
 
 /// An implementation of the minimal molecule API concept.
+/// 
+/// ```rust
+/// use chemcore::molecule::{
+///     Molecule, DefaultMolecule, Element, Atom, BondOrder, Error
+/// };
+/// 
+/// fn main() -> Result<(), Error> {
+///     let molecule = DefaultMolecule::from_adjacency(vec![
+///         (Atom::new(Element::C, 3, 0, None, None), vec![
+///             (1, BondOrder::Single, None)
+///         ]),
+///         (Atom::new(Element::C, 3, 0, None, None), vec![
+///             (0, BondOrder::Single, None)
+///         ])
+///     ])?;
+/// 
+///     assert_eq!(molecule.element(0), Ok(Element::C));
+/// 
+///     Ok(())
+/// }
+/// ```
+#[derive(Debug, PartialEq)]
 pub struct DefaultMolecule {
-    atoms: Vec<Atom>,
-    indices: Vec<usize>,
-    edges: Vec<(usize, usize)>
+    nodes: Vec<Node>,
+    bonds: HashMap<(usize, usize), (BondOrder, Option<Parity>)>,
+    graph: ArrayGraph
 }
 
 impl DefaultMolecule {
-    pub fn build(spec: spec::Molecule) -> Result<Self, Error> {
-        let mut atoms = Vec::new();
+    pub fn new() -> Self {
+        DefaultMolecule {
+            nodes: Vec::new(), bonds: HashMap::new(), graph: ArrayGraph::new()
+        }
+    }
 
-        for atom_spec in spec.atoms {
-            match Atom::build(atom_spec) {
-                Ok(node) => atoms.push(node),
-                Err(error) => return Err(error)
+    pub fn from_adjacency(
+        entries: Vec<(Atom, Vec<(usize, BondOrder, Option<Parity>)>)>
+    ) -> Result<Self, Error> {
+        let mut nodes = Vec::new();
+        let mut bonds = HashMap::new();
+        let mut adjacency = Vec::new();
+
+        for (atom, outs) in entries {
+            let mut neighbors = Vec::new();
+            let mut orders = Vec::new();
+
+            for (tid, order, parity) in outs {
+                neighbors.push(tid);
+                orders.push(order);
+                bonds.insert((nodes.len(), tid), (order, parity));
             }
+
+            match Node::build(atom, orders) {
+                Ok(node) => {
+                    nodes.push(node);
+                },
+                Err(NodeError::Hypervalent) => {
+                    return Err(Error::Hypervalent(nodes.len()));
+                },
+                Err(NodeError::ImpossibleIsotope) => {
+                    return Err(Error::ImpossibleIsotope(nodes.len()));
+                },
+                Err(NodeError::ParityNotAllowed) => {
+                    return Err(Error::AtomParityNotAllowed(nodes.len()));
+                }
+            }
+
+            adjacency.push(neighbors);
         }
 
-        let mut edges = Vec::new();
+        let graph = ArrayGraph::from_adjacency(adjacency).unwrap();
 
-        for spec::Bond { sid, tid, order, parity } in spec.bonds {
-            match atoms.get_mut(sid) {
-                Some(source) => {
-                    if let Err(error) = source.add_bond(tid, order, parity) {
-                        return Err(error);
-                    }
-                },
-                None => return Err(Error::MisplacedBond)
-            }
+        Ok(DefaultMolecule { nodes, graph, bonds })
+    }
 
-            match atoms.get_mut(tid) {
-                Some(target) => {
-                    if let Err(error) = target.add_bond(sid, order, parity) {
-                        return Err(error);
-                    }
-                },
-                None => return Err(Error::MisplacedBond)
-            }
-
-            edges.push((sid, tid));
+    fn node_at(&self, id: usize) -> Result<&Node, GraphError> {
+        match self.nodes.get(id) {
+            Some(node) => Ok(node),
+            None => Err(GraphError::MissingNode(id))
         }
-
-        let indices = (0..atoms.len()).collect::<Vec<usize>>();
-
-        Ok(DefaultMolecule { atoms, indices, edges })
     }
-}
 
-pub struct EdgeIterator<'a> {
-    cursor: usize,
-    edges: &'a Vec<(usize, usize)>
-}
-
-impl<'a> EdgeIterator<'a> {
-    pub fn new(edges: &'a Vec<(usize, usize)>) -> Self {
-        EdgeIterator { cursor: 0, edges }
-    }
-}
-
-impl<'a> Iterator for EdgeIterator<'a> {
-    type Item = (&'a usize, &'a usize);
-
-    fn next(&mut self) -> Option<(&'a usize, &'a usize)> {
-        if let Some((sid, tid)) = self.edges.get(self.cursor) {
-            self.cursor += 1;
-
-            Some((&sid, &tid))
+    fn edge_at(
+        &self, sid: usize, tid: usize
+    ) -> Result<&(BondOrder, Option<Parity>), GraphError> {
+        if !self.graph.has_node(sid) {
+            Err(GraphError::MissingNode(sid))
+        } else if !self.graph.has_node(tid) {
+            Err(GraphError::MissingNode(tid))
         } else {
-            None
+            match self.bonds.get(&(sid, tid)) {
+                Some(edge) => Ok(edge),
+                None => Err(GraphError::MissingEdge(sid, tid))
+            }
         }
     }
 }
 
-impl<'a> Graph<'a, usize> for DefaultMolecule {
-    type NodeIterator = std::slice::Iter<'a, usize>;
-    type NeighborIterator = std::slice::Iter<'a, usize>;
-    type EdgeIterator = EdgeIterator<'a>;
+#[derive(Debug, PartialEq)]
+enum NodeError {
+    Hypervalent,
+    ImpossibleIsotope,
+    ParityNotAllowed
+}
 
+#[derive(Debug, PartialEq)]
+struct Node {
+    element: Element,
+    electrons: u8,
+    charge: i8,
+    hydrogens: u8,
+    isotope: Option<u16>,
+    parity: Option<Parity>
+}
+
+// TODO: parity should require a total of four substituents,
+// including up to one hydrogen
+
+impl Node {
+    fn build(
+        atom: Atom, orders: Vec<BondOrder>
+    ) -> Result<Self, NodeError> {
+        let element = atom.element;
+        let hydrogens = atom.hydrogens;
+        let isotope = atom.isotope;
+        let parity = atom.parity;
+        let mut electrons = element.valence_electrons() as i32;
+        let valence = orders.iter().fold(0, |valence, order| {
+            valence + order.multiplicity()
+        });
+        let ion = atom.ion;
+        
+        electrons -= hydrogens as i32;
+        electrons -= ion as i32;
+        electrons -= valence as i32;
+        
+        if electrons < 0 {
+            return Err(NodeError::Hypervalent);
+        }
+
+        if let Some(isotope) = isotope {
+            if isotope < element.atomic_number() {
+                return Err(NodeError::ImpossibleIsotope);
+            }
+        }
+
+        let substitution = hydrogens as usize + orders.len();
+
+        if parity.is_some() && substitution != 4 {
+            return Err(NodeError::ParityNotAllowed);
+        }
+        
+        Ok(Node {
+            element,
+            charge: ion,
+            electrons: electrons as u8,
+            hydrogens,
+            isotope,
+            parity
+        })
+    }
+}
+
+impl Graph for DefaultMolecule {
     fn is_empty(&self) -> bool {
-        self.atoms.is_empty()
+        self.graph.is_empty()
     }
 
     fn order(&self) -> usize {
-        self.atoms.len()
+        self.graph.order()
     }
 
-    fn size(&self) -> usize {
-        self.edges.len()
+    fn size(&self) -> usize { 
+        self.graph.size()
     }
 
-    fn nodes(&'a self) -> Self::NodeIterator {
-        self.indices.iter()
+    fn nodes(&self) -> &[usize] {
+        self.graph.nodes()
     }
 
-    fn edges(&'a self) -> Self::EdgeIterator {
-        EdgeIterator::new(&self.edges)
+    fn neighbors(&self, id: usize) -> Result<&[usize], GraphError> {
+        self.graph.neighbors(id)
+    }
+    
+    fn has_node(&self, id: usize) -> bool {
+        self.graph.has_node(id)
     }
 
-    fn has_node(&self, id: &usize) -> bool {
-        match self.atoms.get(*id) {
-            Some(_) => true,
-            None => false
-        }
+    fn degree(&self, id: usize) -> Result<usize, GraphError> {
+        self.graph.degree(id)
     }
 
-    fn neighbors(
-        &'a self, id: &usize
-    ) -> Result<Self::NeighborIterator, GraphError> {
-        match self.atoms.get(*id) {
-            Some(atom) => Ok(atom.neighbors()),
-            None => Err(GraphError::UnknownNode)
-        }
+    fn edges(&self) -> &[(usize, usize)] {
+        self.graph.edges()
     }
 
-    fn degree(&self, id: &usize) -> Result<usize, GraphError> {
-        match self.atoms.get(*id) {
-            Some(atom) => Ok(atom.degree()),
-            None => Err(GraphError::UnknownNode)
-        }
-    }
-
-    fn has_edge(&self, sid: &usize, tid: &usize) -> Result<bool, GraphError> {
-        let target = self.atoms.get(*tid);
-        
-        if target.is_none() {
-            return Err(GraphError::UnknownNode);
-        }
-
-        match self.atoms.get(*sid) {
-            Some(atom) => Ok(atom.has_edge(*tid)),
-            None => Err(GraphError::UnknownNode)
-        }
+    fn has_edge(&self, sid: usize, tid: usize) -> Result<bool, GraphError> {
+        self.graph.has_edge(sid, tid)
     }
 }
 
-impl<'a> Molecule<'a, usize> for DefaultMolecule {
-    fn element(&self, id: &usize) -> Result<Element, GraphError> {
-        match self.atoms.get(*id) {
-            Some(node) => Ok(node.element()),
-            None => Err(GraphError::UnknownNode)
-        }
+impl Molecule for DefaultMolecule {
+    fn element(&self, id: usize) -> Result<Element, GraphError> {
+        Ok(self.node_at(id)?.element)
     }
 
-    fn isotope(&self, id: &usize) -> Result<Option<u16>, GraphError> {
-        match self.atoms.get(*id) {
-            Some(atom) => Ok(atom.isotope()),
-            None => Err(GraphError::UnknownNode)
-        }
+    fn isotope(&self, id: usize) -> Result<Option<u16>, GraphError> {
+        Ok(self.node_at(id)?.isotope)
+    }
+    
+    fn electrons(&self, id: usize) -> Result<u8, GraphError> {
+        Ok(self.node_at(id)?.electrons)
     }
 
-    fn electrons(&self, id: &usize) -> Result<u8, GraphError> {
-        match self.atoms.get(*id) {
-            Some(atom) => Ok(atom.electrons()),
-            None => Err(GraphError::UnknownNode)
-        }
+    fn hydrogens(&self, id: usize) -> Result<u8, GraphError> {
+        Ok(self.node_at(id)?.hydrogens)
     }
 
-    fn hydrogens(&self, id: &usize) -> Result<u8, GraphError> {
-        match self.atoms.get(*id) {
-            Some(atom) => Ok(atom.hydrogens()),
-            None => Err(GraphError::UnknownNode)
-        }
+    fn charge(&self, id: usize) -> Result<i8, GraphError> {
+        Ok(self.node_at(id)?.charge)
     }
 
-    fn charge(&self, id: &usize) -> Result<i8, GraphError> {
-        match self.atoms.get(*id) {
-            Some(atom) => Ok(atom.charge()),
-            None => Err(GraphError::UnknownNode)
-        }
+    fn atom_parity(&self, id: usize) -> Result<Option<Parity>, GraphError> {
+        Ok(self.node_at(id)?.parity)
     }
 
-    fn atom_parity(&self, id: &usize) -> Result<Option<Parity>, GraphError> {
-        match self.atoms.get(*id) {
-            Some(atom) => Ok(atom.atom_parity()),
-            None => Err(GraphError::UnknownNode)
-        }
+    fn bond_order(&self, sid: usize, tid: usize) -> Result<f32, GraphError> {
+        Ok(self.edge_at(sid, tid)?.0.multiplicity() as f32)
     }
-
-    fn bond_order(&self, sid: &usize, tid: &usize) -> Result<u8, GraphError> {
-        let target = self.atoms.get(*tid);
-        
-        if target.is_none() {
-            return Err(GraphError::UnknownNode);
-        }
-
-        match self.atoms.get(*sid) {
-            Some(atom) => Ok(atom.bond_order(tid)),
-            None => Err(GraphError::UnknownNode)
-        }
-    }
-
+    
     fn bond_parity(
-        &self, sid: &usize, tid: &usize
+        &self, sid: usize, tid: usize
     ) -> Result<Option<Parity>, GraphError> {
-        let target = self.atoms.get(*tid);
-
-        if target.is_none() {
-            return Err(GraphError::UnknownNode);
-        }
-
-        match self.atoms.get(*sid) {
-            Some(atom) => Ok(atom.bond_parity(tid)),
-            None => Err(GraphError::UnknownNode)
-        }
+        Ok(self.edge_at(sid, tid)?.1)
     }
 }
 
 #[cfg(test)]
-mod tests {
+mod molecule_tests {
     use super::*;
-    use crate::molecule::spec;
-    use crate::molecule::BondOrder;
+    use super::super::Element;
 
     #[test]
-    fn build_returns_error_given_too_many_hydrogens() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom {
-                    element: Element::C, hydrogens: 5, ..Default::default()
-                }
-            ],
-            bonds: vec![ ]
-        });
+    fn from_adjacency_given_atom_initially_oversaturated() {
+        let molecule = DefaultMolecule::from_adjacency(vec![
+            (Atom::new(Element::C, 5, 0, None, None), vec![ ])
+        ]);
 
-        assert_eq!(molecule.err(), Some(Error::HypervalentAtom));
+        assert_eq!(molecule, Err(Error::Hypervalent(0)));
     }
 
     #[test]
-    fn build_returns_error_given_invalid_bond_sid() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom {
-                    element: Element::C, hydrogens: 3, ..Default::default()
-                },
-                spec::Atom {
-                    element: Element::C, hydrogens: 3, ..Default::default()
-                }
-            ],
-            bonds: vec![
-                spec::Bond { sid: 2, tid: 1, ..Default::default() }
-            ]
-        });
+    fn from_adjacency_given_atom_hypervalent() {
+        let a0 = Atom::new(Element::C, 3, 0, None, None);
+        let a1 = Atom::new(Element::C, 3, 0, None, None);
 
-        assert_eq!(molecule.err(), Some(Error::MisplacedBond));
+        let molecule = DefaultMolecule::from_adjacency(vec![
+            (a0, vec![ (1, BondOrder::Double, None) ]),
+            (a1, vec![ (0, BondOrder::Double, None) ])
+        ]);
+
+        assert_eq!(molecule, Err(Error::Hypervalent(0)));
     }
 
     #[test]
-    fn build_returns_error_given_invalid_bond_tid() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom {
-                    element: Element::C, hydrogens: 3, ..Default::default()
-                },
-                spec::Atom {
-                    element: Element::C, hydrogens: 3, ..Default::default()
-                }
-            ],
-            bonds: vec![
-                spec::Bond { sid: 0, tid: 2, ..Default::default() }
-            ]
-        });
+    fn from_adjacency_given_invalid_atom_parity() {
+        let a0 = Atom::new(Element::C, 3, 0, None, Some(Parity::Negative));
 
-        assert_eq!(molecule.err(), Some(Error::MisplacedBond));
-    }
+        let molecule = DefaultMolecule::from_adjacency(vec![
+            (a0, vec![ ])
+        ]);
 
-    #[test]
-    fn element_given_invalid_id() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom {
-                    element: Element::C, hydrogens: 4, ..Default::default()
-                }
-            ],
-            bonds: vec![ ]
-        }).unwrap();
-
-        assert_eq!(molecule.element(&1), Err(GraphError::UnknownNode));
-    }
-
-    #[test]
-    fn element_given_valid_id() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom {
-                    element: Element::C, ..Default::default()
-                }
-            ],
-            bonds: vec![ ]
-        }).unwrap();
-
-        assert_eq!(molecule.element(&0), Ok(Element::C));
-    }
-
-    #[test]
-    fn isotope_given_invalid_id() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom {
-                    element: Element::C, hydrogens: 4, ..Default::default()
-                }
-            ],
-            bonds: vec![ ]
-        }).unwrap();
-
-        assert_eq!(molecule.isotope(&1), Err(GraphError::UnknownNode));
-    }
-
-    #[test]
-    fn isotope_given_valid_id() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom {
-                    element: Element::C, isotope: Some(13), ..Default::default()
-                }
-            ],
-            bonds: vec![ ]
-        }).unwrap();
-
-        assert_eq!(molecule.isotope(&0), Ok(Some(13)));
-    }
-
-    #[test]
-    fn electrons_given_invalid_id() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom {
-                    element: Element::C, hydrogens: 0, ..Default::default()
-                }
-            ],
-            bonds: vec![ ]
-        }).unwrap();
-
-        assert_eq!(molecule.electrons(&1), Err(GraphError::UnknownNode));
-    }
-
-    #[test]
-    fn electrons_given_helium() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom {
-                    element: Element::He, hydrogens: 0, ..Default::default()
-                }
-            ],
-            bonds: vec![ ]
-        }).unwrap();
-
-        assert_eq!(molecule.electrons(&0), Ok(2));
-    }
-
-    #[test]
-    fn hydrogens_given_invalid_id() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom {
-                    element: Element::C, hydrogens: 4, ..Default::default()
-                }
-            ],
-            bonds: vec![ ]
-        }).unwrap();
-
-        assert_eq!(molecule.hydrogens(&1), Err(GraphError::UnknownNode));
-    }
-
-    #[test]
-    fn hydrogens_given_methane() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom {
-                    element: Element::C, hydrogens: 4, ..Default::default()
-                }
-            ],
-            bonds: vec![ ]
-        }).unwrap();
-
-        assert_eq!(molecule.hydrogens(&0), Ok(4));
-    }
-
-    #[test]
-    fn charge_given_invalid_id() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom {
-                    element: Element::C, hydrogens: 4, ..Default::default()
-                }
-            ],
-            bonds: vec![ ]
-        }).unwrap();
-
-        assert_eq!(molecule.charge(&1), Err(GraphError::UnknownNode));
-    }
-
-    #[test]
-    fn charge_given_methyl_cation() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom {
-                    element: Element::C, hydrogens: 3, ion: 1, isotope: None,
-                    parity: None
-                }
-            ],
-            bonds: vec![ ]
-        }).unwrap();
-
-        assert_eq!(molecule.charge(&0), Ok(1));
-    }
-
-    #[test]
-    fn charge_given_foo() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom {
-                    element: Element::C, hydrogens: 2, ..Default::default()
-                },
-                spec::Atom {
-                    element: Element::O, hydrogens: 2, ..Default::default()
-                }
-            ],
-            bonds: vec![
-                spec::Bond {
-                    sid: 0, tid: 1, order: BondOrder::Double, parity: None
-                }
-            ]
-        }).unwrap();
-
-        assert_eq!(molecule.charge(&0), Ok(0));
-    }
-
-    #[test]
-    fn atom_parity_given_invalid_id() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom {
-                    element: Element::C, hydrogens: 4, ..Default::default()
-                }
-            ],
-            bonds: vec![ ]
-        }).unwrap();
-
-        assert_eq!(molecule.atom_parity(&1), Err(GraphError::UnknownNode));
-    }
-
-    #[test]
-    fn atom_parity_given_methane() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom {
-                    element: Element::C, hydrogens: 3, ion: 1, isotope: None,
-                    parity: None
-                }
-            ],
-            bonds: vec![ ]
-        }).unwrap();
-
-        assert_eq!(molecule.atom_parity(&0), Ok(None));
-    }
-
-    #[test]
-    fn atom_parity_given_bromochlorofluoromethane() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom {
-                    element: Element::C, hydrogens: 1, ion: 0, isotope: None,
-                    parity: Some(Parity::Positive)
-                },
-                spec::Atom {
-                    element: Element::Br, ..Default::default()
-                },
-                spec::Atom {
-                    element: Element::Cl, ..Default::default()
-                },
-                spec::Atom {
-                    element: Element::F, ..Default::default()
-                }
-            ],
-            bonds: vec![
-                spec::Bond { sid: 0, tid: 1, ..Default::default() },
-                spec::Bond { sid: 0, tid: 2, ..Default::default() },
-                spec::Bond { sid: 0, tid: 3, ..Default::default() }
-            ]
-        }).unwrap();
-
-        assert_eq!(molecule.atom_parity(&0), Ok(Some(Parity::Positive)));
-    }
-
-    #[test]
-    fn bond_order_given_invalid_sid() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom {
-                    element: Element::C, hydrogens: 3, ..Default::default()
-                },
-                spec::Atom {
-                    element: Element::C, hydrogens: 3, ..Default::default()
-                }
-            ],
-            bonds: vec![
-                spec::Bond { sid: 0, tid: 1, ..Default::default() }
-            ]
-        }).unwrap();
-
-        assert_eq!(molecule.bond_order(&2, &0), Err(GraphError::UnknownNode))
-    }
-
-    #[test]
-    fn bond_order_given_invalid_tid() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom {
-                    element: Element::C, hydrogens: 3, ..Default::default()
-                },
-                spec::Atom {
-                    element: Element::C, hydrogens: 3, ..Default::default()
-                }
-            ],
-            bonds: vec![
-                spec::Bond { sid: 0, tid: 1, ..Default::default() }
-            ]
-        }).unwrap();
-
-        assert_eq!(molecule.bond_order(&0, &2), Err(GraphError::UnknownNode));
-    }
-
-    #[test]
-    fn bond_order_given_disconnected_methanes() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom {
-                    element: Element::C, hydrogens: 4, ..Default::default()
-                },
-                spec::Atom {
-                    element: Element::C, hydrogens: 4, ..Default::default()
-                }
-            ],
-            bonds: vec![ ]
-        }).unwrap();
-
-        assert_eq!(molecule.bond_order(&0, &1), Ok(0));
-    }
-
-    #[test]
-    fn bond_order_given_zero() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom {
-                    element: Element::C, hydrogens: 2, ..Default::default()
-                },
-                spec::Atom {
-                    element: Element::C, hydrogens: 2, ..Default::default()
-                }
-            ],
-            bonds: vec![
-                spec::Bond {
-                    sid: 0, tid: 1, order: BondOrder::Zero, parity: None
-                }
-            ]
-        }).unwrap();
-
-        assert_eq!(molecule.bond_order(&0, &1), Ok(0));
-    }
-
-    #[test]
-    fn bond_order_given_ethane() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom {
-                    element: Element::C, hydrogens: 3, ..Default::default()
-                },
-                spec::Atom {
-                    element: Element::C, hydrogens: 3, ..Default::default()
-                }
-            ],
-            bonds: vec![
-                spec::Bond { sid: 0, tid: 1, ..Default::default() }
-            ]
-        }).unwrap();
-
-        assert_eq!(molecule.bond_order(&0, &1), Ok(1));
-    }
-
-    #[test]
-    fn bond_order_given_ethane_reversed() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom {
-                    element: Element::C, hydrogens: 3, ..Default::default()
-                },
-                spec::Atom {
-                    element: Element::C, hydrogens: 3, ..Default::default()
-                }
-            ],
-            bonds: vec![
-                spec::Bond { sid: 0, tid: 1, ..Default::default() }
-            ]
-        }).unwrap();
-
-        assert_eq!(molecule.bond_order(&1, &0), Ok(1));
-    }
-
-    #[test]
-    fn bond_parity_given_invalid_sid() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom {
-                    element: Element::C, hydrogens: 3, ..Default::default()
-                },
-                spec::Atom {
-                    element: Element::C, hydrogens: 3, ..Default::default()
-                }
-            ],
-            bonds: vec![
-                spec::Bond { sid: 0, tid: 1, ..Default::default() }
-            ]
-        }).unwrap();
-
-        assert_eq!(molecule.bond_parity(&2, &0), Err(GraphError::UnknownNode))
-    }
-
-    #[test]
-    fn bond_parity_given_invalid_tid() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom {
-                    element: Element::C, hydrogens: 3, ..Default::default()
-                },
-                spec::Atom {
-                    element: Element::C, hydrogens: 3, ..Default::default()
-                }
-            ],
-            bonds: vec![
-                spec::Bond { sid: 0, tid: 1, ..Default::default() }
-            ]
-        }).unwrap();
-
-        assert_eq!(molecule.bond_parity(&0, &2), Err(GraphError::UnknownNode));
-    }
-
-    #[test]
-    fn bond_parity_given_ethane() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom {
-                    element: Element::C, hydrogens: 3, ..Default::default()
-                },
-                spec::Atom {
-                    element: Element::C, hydrogens: 3, ..Default::default()
-                }
-            ],
-            bonds: vec![
-                spec::Bond {
-                    sid: 0, tid: 1, order: BondOrder::Single,
-                    parity: Some(Parity::Negative)
-                }
-            ]
-        }).unwrap();
-
-        assert_eq!(molecule.bond_parity(&0, &1), Ok(Some(Parity::Negative)));
-    }
-
-    #[test]
-    fn is_empty_given_empty() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![ ],
-            bonds: vec![ ]
-        }).unwrap();
-
-        assert_eq!(molecule.is_empty(), true);
+        assert_eq!(molecule, Err(Error::AtomParityNotAllowed(0)));
     }
 
     #[test]
     fn is_empty_given_methane() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom {
-                    element: Element::C, hydrogens: 4, ..Default::default()
-                }
-            ],
-            bonds: vec![ ]
-        }).unwrap();
+        let molecule = DefaultMolecule::from_adjacency(vec![
+            (Atom::new(Element::C, 4, 0, None, None), vec![ ])
+        ]).unwrap();
 
         assert_eq!(molecule.is_empty(), false);
     }
 
     #[test]
-    fn size_given_empty() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![ ],
-            bonds: vec![ ]
-        }).unwrap();
+    fn order_given_methane() {
+        let molecule = DefaultMolecule::from_adjacency(vec![
+            (Atom::new(Element::C, 4, 0, None, None), vec![ ])
+        ]).unwrap();
 
-        assert_eq!(molecule.size(), 0);
+        assert_eq!(molecule.order(), 1);
     }
 
     #[test]
     fn size_given_ethane() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom {
-                    element: Element::C, hydrogens: 3, ..Default::default()
-                },
-                spec::Atom {
-                    element: Element::C, hydrogens: 3, ..Default::default()
-                }
-            ],
-            bonds: vec![
-                spec::Bond { sid: 0, tid: 1, ..Default::default() }
-            ]
-        }).unwrap();
+        let a0 = Atom::new(Element::C, 3, 0, None, None);
+        let a1 = Atom::new(Element::C, 3, 0, None, None);
+
+        let molecule = DefaultMolecule::from_adjacency(vec![
+            (a0, vec![ (1, BondOrder::Single, None) ]),
+            (a1, vec![ (0, BondOrder::Single, None) ])
+        ]).unwrap();
 
         assert_eq!(molecule.size(), 1);
     }
 
     #[test]
-    fn order_given_empty() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![ ],
-            bonds: vec![ ]
-        }).unwrap();
+    fn nodes_given_ethane() {
+        let a0 = Atom::new(Element::C, 3, 0, None, None);
+        let a1 = Atom::new(Element::C, 3, 0, None, None);
 
-        assert_eq!(molecule.order(), 0);
+        let molecule = DefaultMolecule::from_adjacency(vec![
+            (a0, vec![ (1, BondOrder::Single, None) ]),
+            (a1, vec![ (0, BondOrder::Single, None) ])
+        ]).unwrap();
+
+        assert_eq!(molecule.nodes(), &[ 0, 1 ]);
     }
 
     #[test]
-    fn order_given_ethane() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom {
-                    element: Element::C, hydrogens: 3, ..Default::default()
-                },
-                spec::Atom {
-                    element: Element::C, hydrogens: 3, ..Default::default()
-                }
-            ],
-            bonds: vec![
-                spec::Bond { sid: 0, tid: 1, ..Default::default() }
-            ]
-        }).unwrap();
+    fn neighbors_given_propane() {
+        let a0 = Atom::new(Element::C, 3, 0, None, None);
+        let a1 = Atom::new(Element::C, 2, 0, None, None);
+        let a2 = Atom::new(Element::C, 3, 0, None, None);
 
-        assert_eq!(molecule.order(), 2);
-    }
+        let molecule = DefaultMolecule::from_adjacency(vec![
+            (a0, vec![ (1, BondOrder::Single, None) ]),
+            (a1, vec![
+                (0, BondOrder::Single, None),
+                (2, BondOrder::Single, None)
+            ]),
+            (a2, vec![ (1, BondOrder::Single, None) ])
+        ]).unwrap();
 
-    #[test]
-    fn nodes_given_empty() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![ ],
-            bonds: vec![ ]
-        }).unwrap();
-        let nodes = molecule.nodes().collect::<Vec<_>>();
-
-        assert_eq!(nodes.is_empty(), true);
-    }
-
-    #[test]
-    fn nodes_given_methane() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom {
-                    element: Element::C, hydrogens: 4, ..Default::default()
-                }
-            ],
-            bonds: vec![ ]
-        }).unwrap();
-        let nodes = molecule.nodes().collect::<Vec<_>>();
-
-        assert_eq!(nodes, vec![ &0 ]);
-    }
-
-    #[test]
-    fn edges_given_empty() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![ ],
-            bonds: vec![ ]
-        }).unwrap();
-        let edges = molecule.edges().collect::<Vec<_>>();
-
-        assert_eq!(edges.is_empty(), true);
-    }
-
-    #[test]
-    fn edges_given_ethane() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom {
-                    element: Element::C, hydrogens: 3, ..Default::default()
-                },
-                spec::Atom {
-                    element: Element::C, hydrogens: 3, ..Default::default()
-                }
-            ],
-            bonds: vec![
-                spec::Bond { sid: 0, tid: 1, ..Default::default() }
-            ]
-        }).unwrap();
-        let edges = molecule.edges().collect::<Vec<_>>();
-
-        assert_eq!(edges, vec![ ( &0, &1 ) ]);
-    }
-
-    #[test]
-    fn has_node_given_empty() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![ ],
-            bonds: vec![ ]
-        }).unwrap();
-
-        assert_eq!(molecule.has_node(&0), false);
+        assert_eq!(molecule.neighbors(1).unwrap(), &[ 0, 2 ]);
     }
 
     #[test]
     fn has_node_given_methane() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom {
-                    element: Element::C, hydrogens: 4, ..Default::default()
-                }
-            ],
-            bonds: vec![ ]
-        }).unwrap();
+        let molecule = DefaultMolecule::from_adjacency(vec![
+            (Atom::new(Element::C, 4, 0, None, None), vec![ ])
+        ]).unwrap();
 
-        assert_eq!(molecule.has_node(&0), true);
+        assert_eq!(molecule.has_node(0), true);
     }
 
     #[test]
-    fn degree_given_empty() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![ ],
-            bonds: vec![ ]
-        }).unwrap();
-        let degree = molecule.degree(&0);
+    fn degree_given_propane_secondary() {
+        let a0 = Atom::new(Element::C, 3, 0, None, None);
+        let a1 = Atom::new(Element::C, 2, 0, None, None);
+        let a2 = Atom::new(Element::C, 3, 0, None, None);
 
-        assert_eq!(degree.err(), Some(GraphError::UnknownNode));
+        let molecule = DefaultMolecule::from_adjacency(vec![
+            (a0, vec![ (1, BondOrder::Single, None) ]),
+            (a1, vec![
+                (0, BondOrder::Single, None),
+                (2, BondOrder::Single, None)
+            ]),
+            (a2, vec![ (1, BondOrder::Single, None) ])
+        ]).unwrap();
+
+        assert_eq!(molecule.degree(1), Ok(2));
     }
 
     #[test]
-    fn degree_given_ethane() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom {
-                    element: Element::C, hydrogens: 3, ..Default::default()
-                },
-                spec::Atom {
-                    element: Element::C, hydrogens: 3, ..Default::default()
-                }
-            ],
-            bonds: vec![
-                spec::Bond { sid: 0, tid: 1, ..Default::default() }
-            ]
-        }).unwrap();
+    fn edges_given_propane() {
+        let a0 = Atom::new(Element::C, 3, 0, None, None);
+        let a1 = Atom::new(Element::C, 2, 0, None, None);
+        let a2 = Atom::new(Element::C, 3, 0, None, None);
 
-        assert_eq!(molecule.degree(&0), Ok(1));
+        let molecule = DefaultMolecule::from_adjacency(vec![
+            (a0, vec![ (1, BondOrder::Single, None) ]),
+            (a1, vec![
+                (0, BondOrder::Single, None),
+                (2, BondOrder::Single, None)
+            ]),
+            (a2, vec![ (1, BondOrder::Single, None) ])
+        ]).unwrap();
+
+        assert_eq!(molecule.edges(), &[
+            (0, 1),
+            (1, 2)
+        ]);
     }
 
     #[test]
-    fn neighbors_given_empty() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![ ],
-            bonds: vec![ ]
-        }).unwrap();
-        let neighbors = molecule.neighbors(&0);
+    fn has_edge_given_propane() {
+        let a0 = Atom::new(Element::C, 3, 0, None, None);
+        let a1 = Atom::new(Element::C, 2, 0, None, None);
+        let a2 = Atom::new(Element::C, 3, 0, None, None);
 
-        assert_eq!(neighbors.err(), Some(GraphError::UnknownNode))
+        let molecule = DefaultMolecule::from_adjacency(vec![
+            (a0, vec![ (1, BondOrder::Single, None) ]),
+            (a1, vec![
+                (0, BondOrder::Single, None),
+                (2, BondOrder::Single, None)
+            ]),
+            (a2, vec![ (1, BondOrder::Single, None) ])
+        ]).unwrap();
+
+        assert_eq!(molecule.has_edge(0, 1), Ok(true));
     }
 
     #[test]
-    fn neighbors_given_ethane() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom {
-                    element: Element::C, hydrogens: 3, ..Default::default()
-                },
-                spec::Atom {
-                    element: Element::C, hydrogens: 3, ..Default::default()
-                }
-            ],
-            bonds: vec![
-                spec::Bond { sid: 0, tid: 1, ..Default::default() }
-            ]
-        }).unwrap();
-        let neighbors = molecule.neighbors(&0).unwrap().collect::<Vec<_>>();
+    fn element() {
+        let molecule = DefaultMolecule::from_adjacency(vec![
+            (Atom::new(Element::C, 0, 0, None, None), vec![ ])
+        ]).unwrap();
 
-        assert_eq!(neighbors, vec![ &1 ]);
+        assert_eq!(molecule.element(0), Ok(Element::C));
     }
 
     #[test]
-    fn has_edge_given_invalid_sid() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom {
-                    element: Element::C, hydrogens: 3, ..Default::default()
-                },
-                spec::Atom {
-                    element: Element::C, hydrogens: 3, ..Default::default()
-                }
-            ],
-            bonds: vec![
-                spec::Bond { sid: 0, tid: 1, ..Default::default() }
-            ]
-        }).unwrap();
+    fn hydrogens() {
+        let molecule = DefaultMolecule::from_adjacency(vec![
+            (Atom::new(Element::C, 4, 0, None, None), vec![  ])
+        ]).unwrap();
 
-        assert_eq!(molecule.has_edge(&2, &1), Err(GraphError::UnknownNode));
+        assert_eq!(molecule.hydrogens(0), Ok(4));
     }
 
     #[test]
-    fn has_edge_given_invalid_tid() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom {
-                    element: Element::C, hydrogens: 3, ..Default::default()
-                },
-                spec::Atom {
-                    element: Element::C, hydrogens: 3, ..Default::default()
-                }
-            ],
-            bonds: vec![
-                spec::Bond { sid: 0, tid: 1, ..Default::default() }
-            ]
-        }).unwrap();
+    fn charge() {
+        let molecule = DefaultMolecule::from_adjacency(vec![
+            (Atom::new(Element::C, 3, 1, None, None), vec![  ])
+        ]).unwrap();
 
-        assert_eq!(molecule.has_edge(&0, &2), Err(GraphError::UnknownNode));
+        assert_eq!(molecule.charge(0), Ok(1));
     }
 
     #[test]
-    fn has_edge_given_no_edge() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom { 
-                    element: Element::C, hydrogens: 3, ..Default::default()
-                },
-                spec::Atom {
-                    element: Element::C, hydrogens: 2, ..Default::default()
-                },
-                spec::Atom {
-                    element: Element::C, hydrogens: 3, ..Default::default()
-                }
-            ],
-            bonds: vec![
-                spec::Bond { sid: 0, tid: 1, ..Default::default() },
-                spec::Bond { sid: 1, tid: 2, ..Default::default() }
-            ]
-        }).unwrap();
+    fn electrons() {
+        let molecule = DefaultMolecule::from_adjacency(vec![
+            (Atom::new(Element::C, 0, 0, None, None), vec![ ])
+        ]).unwrap();
 
-        assert_eq!(molecule.has_edge(&0, &2), Ok(false));
+        assert_eq!(molecule.electrons(0), Ok(4));
     }
 
     #[test]
-    fn has_edge_given_edge() {
-        let molecule = DefaultMolecule::build(spec::Molecule {
-            atoms: vec![
-                spec::Atom {
-                    element: Element::C, hydrogens: 3, ..Default::default()
-                },
-                spec::Atom {
-                    element: Element::C, hydrogens: 3, ..Default::default()
-                }
-            ],
-            bonds: vec![
-                spec::Bond { sid: 0, tid: 1, ..Default::default() }
-            ]
-        }).unwrap();
+    fn isotope() {
+        let molecule = DefaultMolecule::from_adjacency(vec![
+            (Atom::new(Element::C, 0, 0, Some(13), None), vec![ ])
+        ]).unwrap();
 
-        assert_eq!(molecule.has_edge(&0, &1), Ok(true));
+        assert_eq!(molecule.isotope(0), Ok(Some(13)));
+    }
+
+    #[test]
+    fn atom_parity() {
+        let a0 = Atom::new(Element::C, 1, 0, None, Some(Parity::Negative));
+        let a1 = Atom::new(Element::C, 0, 0, None, None);
+        let a2 = Atom::new(Element::C, 0, 0, None, None);
+        let a3 = Atom::new(Element::C, 0, 0, None, None);
+
+        let molecule = DefaultMolecule::from_adjacency(vec![
+            (a0, vec![
+                (1, BondOrder::Single, None),
+                (2, BondOrder::Single, None),
+                (3, BondOrder::Single, None)
+            ]),
+            (a1, vec! [
+                (0, BondOrder::Single, None)
+            ]),
+            (a2, vec![
+                (0, BondOrder::Single, None)
+            ]),
+            (a3, vec![
+                (0, BondOrder::Single, None)
+            ])
+        ]).unwrap();
+
+        assert_eq!(molecule.atom_parity(0), Ok(Some(Parity::Negative)));
+    }
+
+    #[test]
+    fn bond_order_given_outside_sid() {
+        let a0 = Atom::new(Element::C, 3, 0, None, None);
+        let a1 = Atom::new(Element::C, 3, 0, None, None);
+
+        let molecule = DefaultMolecule::from_adjacency(vec![
+            (a0, vec![ (1, BondOrder::Single, None) ]),
+            (a1, vec![ (0, BondOrder::Single, None) ])
+        ]).unwrap();
+        let result = molecule.bond_order(2, 1);
+
+        assert_eq!(result, Err(GraphError::MissingNode(2)));
+    }
+
+    #[test]
+    fn bond_order_given_outside_tid() {
+        let a0 = Atom::new(Element::C, 3, 0, None, None);
+        let a1 = Atom::new(Element::C, 3, 0, None, None);
+
+        let molecule = DefaultMolecule::from_adjacency(vec![
+            (a0, vec![ (1, BondOrder::Single, None) ]),
+            (a1, vec![ (0, BondOrder::Single, None) ])
+        ]).unwrap();
+        let result = molecule.bond_order(0, 2);
+
+        assert_eq!(result, Err(GraphError::MissingNode(2)));
+    }
+
+    #[test]
+    fn bond_order_given_no_edge() {
+        let a0 = Atom::new(Element::C, 3, 0, None, None);
+        let a1 = Atom::new(Element::C, 3, 0, None, None);
+
+        let molecule = DefaultMolecule::from_adjacency(vec![
+            (a0, vec![ ]),
+            (a1, vec![ ])
+        ]).unwrap();
+        let result = molecule.bond_order(0, 1);
+
+        assert_eq!(result, Err(GraphError::MissingEdge(0, 1)));
+    }
+
+    #[test]
+    fn bond_order_given_inside() {
+        let a0 = Atom::new(Element::C, 3, 0, None, None);
+        let a1 = Atom::new(Element::C, 3, 0, None, None);
+
+        let molecule = DefaultMolecule::from_adjacency(vec![
+            (a0, vec![ (1, BondOrder::Single, None) ]),
+            (a1, vec![ (0, BondOrder::Single, None) ])
+        ]).unwrap();
+
+        assert_eq!(molecule.bond_order(0, 1), Ok(1.0f32));
+    }
+
+
+
+
+    #[test]
+    fn bond_parity_given_outside_sid() {
+        let a0 = Atom::new(Element::C, 2, 0, None, None);
+        let a1 = Atom::new(Element::C, 2, 0, None, None);
+
+        let molecule = DefaultMolecule::from_adjacency(vec![
+            (a0, vec![ (1, BondOrder::Double, Some(Parity::Positive)) ]),
+            (a1, vec![ (0, BondOrder::Double, Some(Parity::Positive)) ])
+        ]).unwrap();
+        let result = molecule.bond_parity(2, 1);
+
+        assert_eq!(result, Err(GraphError::MissingNode(2)));
+    }
+
+    #[test]
+    fn bond_parity_given_outside_tid() {
+        let a0 = Atom::new(Element::C, 2, 0, None, None);
+        let a1 = Atom::new(Element::C, 2, 0, None, None);
+
+        let molecule = DefaultMolecule::from_adjacency(vec![
+            (a0, vec![ (1, BondOrder::Double, Some(Parity::Positive)) ]),
+            (a1, vec![ (0, BondOrder::Double, Some(Parity::Positive)) ])
+        ]).unwrap();
+        let result = molecule.bond_parity(0, 2);
+
+        assert_eq!(result, Err(GraphError::MissingNode(2)));
+    }
+
+    #[test]
+    fn bond_parity_given_no_edge() {
+        let a0 = Atom::new(Element::C, 2, 0, None, None);
+        let a1 = Atom::new(Element::C, 2, 0, None, None);
+
+        let molecule = DefaultMolecule::from_adjacency(vec![
+            (a0, vec![ ]),
+            (a1, vec![ ])
+        ]).unwrap();
+        let result = molecule.bond_parity(0, 1);
+
+        assert_eq!(result, Err(GraphError::MissingEdge(0, 1)));
+    }
+
+    #[test]
+    fn bond_parity_given_none() {
+        let a0 = Atom::new(Element::C, 2, 0, None, None);
+        let a1 = Atom::new(Element::C, 2, 0, None, None);
+
+        let molecule = DefaultMolecule::from_adjacency(vec![
+            (a0, vec![ (1, BondOrder::Double, None) ]),
+            (a1, vec![ (0, BondOrder::Double, None) ])
+        ]).unwrap();
+
+        assert_eq!(molecule.bond_parity(0, 1), Ok(None));
+    }
+
+    #[test]
+    fn bond_parity_given_some() {
+        let a0 = Atom::new(Element::C, 2, 0, None, None);
+        let a1 = Atom::new(Element::C, 2, 0, None, None);
+
+        let molecule = DefaultMolecule::from_adjacency(vec![
+            (a0, vec![ (1, BondOrder::Double, Some(Parity::Positive)) ]),
+            (a1, vec![ (0, BondOrder::Double, Some(Parity::Positive)) ])
+        ]).unwrap();
+
+        assert_eq!(molecule.bond_parity(0, 1), Ok(Some(Parity::Positive)));
+    }
+}
+
+#[cfg(test)]
+mod node_tests {
+    use super::*;
+
+    #[test]
+    fn build_given_oversaturated() {
+        let atom = Atom::new(Element::C, 5, 0, None, None);
+
+        assert_eq!(Node::build(atom, vec![ ]), Err(NodeError::Hypervalent));
+    }
+
+    #[test]
+    fn build_given_overcharged() {
+        let atom = Atom::new(Element::C, 0, 5, None, None);
+
+        assert_eq!(Node::build(atom, vec![ ]), Err(NodeError::Hypervalent));
+    }
+
+    #[test]
+    fn build_given_impossible_isotope() {
+        let atom = Atom::new(Element::C, 0, 0, Some(5), None);
+
+        assert_eq!(Node::build(atom, vec![ ]), Err(NodeError::ImpossibleIsotope));
+    }
+
+    #[test]
+    fn build_given_parity_and_trivalent() {
+        let atom = Atom::new(Element::C, 0, 0, None, Some(Parity::Positive));
+        let node = Node::build(atom, vec![
+            BondOrder::Single,
+            BondOrder::Single,
+            BondOrder::Single
+        ]);
+
+        assert_eq!(node, Err(NodeError::ParityNotAllowed));
+    }
+
+    #[test]
+    fn neutral() {
+        let atom = Atom::new(Element::C, 0, 0, None, None);
+        let node = Node::build(atom, vec![ ]).unwrap();
+
+        assert_eq!(node, Node {
+            element: Element::C,
+            electrons: 4,
+            hydrogens: 0,
+            charge: 0,
+            isotope: None,
+            parity: None 
+        });
+    }
+
+    #[test]
+    fn neutral_with_single_bond() {
+        let atom = Atom::new(Element::C, 0, 0, None, None);
+        let node = Node::build(atom, vec![
+            BondOrder::Single
+        ]).unwrap();
+
+        assert_eq!(node, Node {
+            element: Element::C,
+            electrons: 3,
+            hydrogens: 0,
+            charge: 0,
+            isotope: None,
+            parity: None 
+        });
+    }
+
+    #[test]
+    fn neutral_with_double_bond() {
+        let atom = Atom::new(Element::C, 0, 0, None, None);
+        let node = Node::build(atom, vec![
+            BondOrder::Double
+        ]).unwrap();
+
+        assert_eq!(node, Node {
+            element: Element::C,
+            electrons: 2,
+            hydrogens: 0,
+            charge: 0,
+            isotope: None,
+            parity: None 
+        });
+    }
+
+    #[test]
+    fn neutral_with_triple_bond() {
+        let atom = Atom::new(Element::C, 0, 0, None, None);
+        let node = Node::build(atom, vec![
+            BondOrder::Triple
+        ]).unwrap();
+
+        assert_eq!(node, Node {
+            element: Element::C,
+            electrons: 1,
+            hydrogens: 0,
+            charge: 0,
+            isotope: None,
+            parity: None 
+        });
+    }
+
+    #[test]
+    fn neutral_with_hydrogen() {
+        let atom = Atom::new(Element::C, 1, 0, None, None);
+        let node = Node::build(atom, vec![ ]).unwrap();
+
+        assert_eq!(node, Node {
+            element: Element::C,
+            electrons: 3,
+            hydrogens: 1,
+            charge: 0,
+            isotope: None,
+            parity: None 
+        });
+    }
+
+    #[test]
+    fn positively_charged() {
+        let atom = Atom::new(Element::C, 0, 1, None, None);
+        let node = Node::build(atom, vec![ ]).unwrap();
+
+        assert_eq!(node, Node {
+            element: Element::C,
+            electrons: 3,
+            hydrogens: 0,
+            charge: 1,
+            isotope: None,
+            parity: None 
+        });
+    }
+
+    #[test]
+    fn positively_charged_with_hydrogen() {
+        let atom = Atom::new(Element::C, 3, 1, None, None);
+        let node = Node::build(atom, vec![ ]).unwrap();
+
+        assert_eq!(node, Node {
+            element: Element::C,
+            electrons: 0,
+            hydrogens: 3,
+            charge: 1,
+            isotope: None,
+            parity: None 
+        });
+    }
+
+    #[test]
+    fn negatively_charged() {
+        let atom = Atom::new(Element::C, 0, -1, None, None);
+        let node = Node::build(atom, vec![ ]).unwrap();
+
+        assert_eq!(node, Node {
+            element: Element::C,
+            electrons: 5,
+            hydrogens: 0,
+            charge: -1,
+            isotope: None,
+            parity: None 
+        });
+    }
+
+    #[test]
+    fn negatively_charged_with_hydrogen() {
+        let atom = Atom::new(Element::C, 3, -1, None, None);
+        let node = Node::build(atom, vec![ ]).unwrap();
+
+        assert_eq!(node, Node {
+            element: Element::C,
+            electrons: 2,
+            hydrogens: 3,
+            charge: -1,
+            isotope: None,
+            parity: None 
+        });
+    }
+
+    #[test]
+    fn isotope() {
+        let atom = Atom::new(Element::C, 0, 0, Some(13), None);
+        let node = Node::build(atom, vec![ ]).unwrap();
+
+        assert_eq!(node, Node {
+            element: Element::C,
+            electrons: 4,
+            hydrogens: 0,
+            charge: 0,
+            isotope: Some(13),
+            parity: None 
+        });
+    }
+
+    #[test]
+    fn parity() {
+        let atom = Atom::new(Element::C, 0, 0, None, Some(Parity::Negative));
+        let node = Node::build(atom, vec![
+            BondOrder::Single,
+            BondOrder::Single,
+            BondOrder::Single,
+            BondOrder::Single
+        ]).unwrap();
+
+        assert_eq!(node, Node {
+            element: Element::C,
+            electrons: 0,
+            hydrogens: 0,
+            charge: 0,
+            isotope: None,
+            parity: Some(Parity::Negative) 
+        });
     }
 }
