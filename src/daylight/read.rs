@@ -67,8 +67,25 @@ mod tests {
     }
 
     #[test]
-    fn furan_given_aromatic_bonds() {
+    fn benzene_given_aromatic_bonds() {
         let molecule = read(&"C1:C:C:C:C:C:1").unwrap();
+        let bonds = molecule.edges().iter().map(|
+            (sid, tid)| (*sid, *tid, molecule.bond_order(*sid, *tid).unwrap())
+        ).collect::<Vec<_>>();
+
+        assert_eq!(bonds, vec![
+            (0, 5, 2f32),
+            (0, 1, 1f32),
+            (1, 2, 2f32),
+            (2, 3, 1f32),
+            (3, 4, 2f32),
+            (4, 5, 1f32)
+        ]);
+    }
+
+    #[test]
+    fn benzene_given_aromatic_atoms() {
+        let molecule = read(&"c1ccccc1").unwrap();
         let bonds = molecule.edges().iter().map(|
             (sid, tid)| (*sid, *tid, molecule.bond_order(*sid, *tid).unwrap())
         ).collect::<Vec<_>>();
