@@ -79,13 +79,6 @@ mod tests {
     }
 
     #[test]
-    fn texas_carbon() {
-        let result = smiles_to_adjacency(&"C(C)(C)(C)(C)C");
-
-        assert_eq!(result, Err(Error::Hypervalent(0)));
-    }
-
-    #[test]
     fn methane() {
         let adj = smiles_to_adjacency(&"C").unwrap();
 
