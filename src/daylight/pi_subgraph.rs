@@ -8,7 +8,15 @@ pub fn pi_subgraph(atoms: &[Atom]) -> Result<HashGraph, Error> {
     let mut singletons = Vec::new();
 
     for (sid, atom) in atoms.iter().enumerate() {
-        if atom.nub.aromatic && atom.bonds.is_empty() {
+        let isolated = !atom.bonds.iter().any(|bond| {
+            if let Some(style) = bond.style {
+                style == purr::mol::Style::Aromatic
+            } else {
+                atoms[bond.tid].nub.aromatic
+            }
+        });
+
+        if atom.nub.aromatic && isolated {
             singletons.push(sid);
         }
     }
@@ -108,6 +116,13 @@ mod tests {
         assert_eq!(pi, Ok(HashGraph::from_edges(vec![
             (0, 1)
         ], vec![ ]).unwrap()));
+    }
+
+    #[test]
+    fn propyl_radical_with_aromatic_atom() {
+        let pi = pi_subgraph(&read("CCc").unwrap());
+
+        assert_eq!(pi, Ok(HashGraph::from_edges(vec![ ], vec![ 2 ]).unwrap()))
     }
 
     #[test]
