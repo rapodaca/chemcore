@@ -11,5 +11,6 @@ A cheminformatics toolkit.
 """
 
 [dependencies]
-gamma = "0.6"
+# gamma = "0.6"
+gamma = { path = "../gamma" }
 purr = "0.6"

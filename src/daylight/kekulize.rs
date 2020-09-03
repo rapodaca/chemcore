@@ -7,12 +7,16 @@ use super::pi_subgraph;
 pub fn kekulize(mut atoms: Vec<Atom>) -> Result<Vec<Atom>, Error> {
     let pi = pi_subgraph(&atoms)?;
 
+    println!("{:?}", pi);
+    
     if pi.is_empty() {
         return Ok(atoms);
     }
-
+    
     let matching = greedy(&pi);
 
+    println!(" matching {:?}", matching);
+    
     if matching.len() * 2 != pi.order() {
         return Err(Error::CanNotKekulize);
     }
@@ -239,6 +243,18 @@ mod tests {
                 ]
             }
         ]);
+    }
+
+    #[test]
+    fn foo() {
+        let atoms = read("c1cscn1").unwrap();
+        let atoms = kekulize(atoms).unwrap();
+    }
+
+    #[test]
+    fn bar() {
+        let atoms = read("c1nc2c([nH]1)c(=O)[nH]cn2").unwrap();
+        let atoms = kekulize(atoms).unwrap();
     }
 
     #[test]
