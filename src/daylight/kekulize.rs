@@ -1,59 +1,71 @@
 use purr::mol::{ Atom, Style };
-use gamma::matching::greedy;
+use gamma::matching::{ greedy, maximum_matching };
 use gamma::graph::Graph;
+use gamma::matching::Pairing;
 use crate::molecule::Error;
 use super::pi_subgraph;
 
 pub fn kekulize(mut atoms: Vec<Atom>) -> Result<Vec<Atom>, Error> {
     let pi = pi_subgraph(&atoms)?;
+    let mut pairing = greedy(&pi);
 
-    println!("{:?}", pi);
-    
+    maximum_matching(&pi, &mut pairing);
+
     if pi.is_empty() {
         return Ok(atoms);
-    }
-    
-    let matching = greedy(&pi);
-
-    println!(" matching {:?}", matching);
-    
-    if matching.len() * 2 != pi.order() {
+    } else if pairing.order() != pi.order() {
         return Err(Error::CanNotKekulize);
     }
 
-    for (sid, tid) in matching {
-        let source = &mut atoms[sid];
-
-        if let Some(bond) = source.bonds.iter_mut().find(|bond| bond.tid == tid) {
-            bond.style = Some(Style::Double);
-        } else {
-
-        }
-
-        let target = &mut atoms[tid];
-
-        if let Some(bond) = target.bonds.iter_mut().find(|bond| bond.tid == sid) {
-            bond.style = Some(Style::Double);
-        }
-    }
-
-    for atom in atoms.iter_mut() {
+    for (sid, mut atom) in atoms.iter_mut().enumerate() {
         atom.nub.aromatic = false;
-    }
 
-    for atom in atoms.iter_mut() {
-        for out in atom.bonds.iter_mut() {
-            if let Some(Style::Aromatic) = out.style {
-                out.style.replace(Style::Single);
-            }
+        if pairing.has_node(sid) {
+            restyle_bonds_from_matched(sid, atom, &pairing);
+        } else {
+            restyle_bonds_from_unmatched(atom);
         }
     }
 
     Ok(atoms)
 }
 
+fn restyle_bonds_from_matched(id: usize, atom: &mut Atom, pairing: &Pairing) {
+    let mate = pairing.mate(id);
+
+    for bond in atom.bonds.iter_mut() {
+        match bond.style {
+            Some(Style::Aromatic) => {
+                bond.style.replace(if bond.tid == mate {
+                    Style::Double
+                } else {
+                    Style::Single
+                });
+            },
+            None => {
+                if bond.tid == mate {
+                    bond.style.replace(Style::Double);
+                }
+            },
+            _ => ()
+        }
+    }
+}
+
+fn restyle_bonds_from_unmatched(atom: &mut Atom) {
+    for bond in atom.bonds.iter_mut() {
+        match bond.style {
+            Some(Style::Aromatic) => {
+                bond.style.replace(Style::Single);
+            },
+            _ => ()
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use pretty_assertions::assert_eq;
     use super::*;
     use purr::mol::{ Atom, Bond, Element, Nub };
     use purr::read::{ read };
@@ -170,7 +182,7 @@ mod tests {
     fn butadiene_with_aromatic_bonds() {
         let atoms = read("C:C:C:C").unwrap();
         let atoms = kekulize(atoms).unwrap();
-        println!("{:#?}", atoms);
+        
         assert_eq!(atoms, vec![
             Atom {
                 nub: Default::default(),
@@ -246,15 +258,46 @@ mod tests {
     }
 
     #[test]
-    fn foo() {
+    fn thiazole_all_aromatic_atoms() {
         let atoms = read("c1cscn1").unwrap();
-        let atoms = kekulize(atoms).unwrap();
-    }
 
-    #[test]
-    fn bar() {
-        let atoms = read("c1nc2c([nH]1)c(=O)[nH]cn2").unwrap();
-        let atoms = kekulize(atoms).unwrap();
+        assert_eq!(kekulize(atoms).unwrap(), vec![
+            Atom {
+                nub: Default::default(),
+                bonds: vec![
+                    Bond { tid: 4, style: None },
+                    Bond { tid: 1, style: Some(Style::Double) },
+                ]
+            },
+            Atom {
+                nub: Default::default(),
+                bonds: vec![
+                    Bond { tid: 0, style: Some(Style::Double) },
+                    Bond { tid: 2, style: None }
+                ]
+            },
+            Atom {
+                nub: Nub { element: Element::S, ..Default::default() },
+                bonds: vec![
+                    Bond { tid: 1, style: None },
+                    Bond { tid: 3, style: None }
+                ]
+            },
+            Atom {
+                nub: Default::default(),
+                bonds: vec![
+                    Bond { tid: 2, style: None },
+                    Bond { tid: 4, style: Some(Style::Double) }
+                ]
+            },
+            Atom {
+                nub: Nub { element: Element::N, ..Default::default() },
+                bonds: vec![
+                    Bond { tid: 3, style: Some(Style::Double) },
+                    Bond { tid: 0, style: None}
+                ]
+            }
+        ])
     }
 
     #[test]
@@ -296,6 +339,102 @@ mod tests {
                 bonds: vec![
                     Bond { tid: 3, style: Some(Style::Double) },
                     Bond { tid: 0, style: None }
+                ]
+            }
+        ]);
+    }
+
+    #[test]
+    fn selenophene_all_aromatic_atoms() {
+        let atoms = read("[se]1cccc1").unwrap();
+        let atoms = kekulize(atoms).unwrap();
+
+        assert_eq!(atoms, vec![
+            Atom {
+                nub: Nub {
+                    element: Element::Se,
+                    hcount: Some(0),
+                    charge: Some(0),
+                    ..Default::default()
+                },
+                bonds: vec![
+                    Bond { tid: 4, style: None },
+                    Bond { tid: 1, style: None }
+                ]
+            },
+            Atom {
+                nub: Default::default(),
+                bonds: vec![
+                    Bond { tid: 0, style: None },
+                    Bond { tid: 2, style: Some(Style::Double) }
+                ]
+            },
+            Atom {
+                nub: Default::default(),
+                bonds: vec![
+                    Bond { tid: 1, style: Some(Style::Double) },
+                    Bond { tid: 3, style: None }
+                ]
+            },
+            Atom {
+                nub: Default::default(),
+                bonds: vec![
+                    Bond { tid: 2, style: None },
+                    Bond { tid: 4, style: Some(Style::Double) }
+                ]
+            },
+            Atom {
+                nub: Default::default(),
+                bonds: vec![
+                    Bond { tid: 3, style: Some(Style::Double) },
+                    Bond { tid: 0, style: None }
+                ]
+            }
+        ]);
+    }
+
+    #[test]
+    fn hydrogen_selenidine_all_aromatic_atoms() {
+        let atoms = read("[seH]1ccccc1").unwrap();
+        let atoms = kekulize(atoms).unwrap();
+
+        assert_eq!(atoms[0], Atom {
+            nub: Nub {
+                element: Element::Se,
+                hcount: Some(1),
+                charge: Some(0),
+                ..Default::default()
+            },
+            bonds: vec![
+                Bond { tid: 5, style: Some(Style::Double) },
+                Bond { tid: 1, style: None },
+            ]
+        })
+    }
+
+    #[test]
+    fn ketene_with_aromatic_carbons() {
+        let atoms = read("cc=O").unwrap();
+        let atoms = kekulize(atoms).unwrap();
+
+        assert_eq!(atoms, vec![
+            Atom {
+                nub: Default::default(),
+                bonds: vec![
+                    Bond { tid: 1, style: Some(Style::Double) }
+                ]
+            },
+            Atom {
+                nub: Default::default(),
+                bonds: vec![
+                    Bond { tid: 0, style: Some(Style::Double) },
+                    Bond { tid: 2, style: Some(Style::Double) }
+                ]
+            },
+            Atom {
+                nub: Nub { element: Element::O, ..Default::default() },
+                bonds: vec![
+                    Bond { tid: 1, style: Some(Style::Double) }
                 ]
             }
         ]);

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
+use std::convert::TryFrom;
 
-use gamma::graph::{ ArrayGraph, Graph, Error as GraphError };
+use gamma::graph::{ DefaultGraph, Graph, Error as GraphError };
 use super::{ Molecule, Atom, BondOrder, Parity, Element, Error };
 
 /// An implementation of the minimal molecule API concept.
@@ -29,13 +30,13 @@ use super::{ Molecule, Atom, BondOrder, Parity, Element, Error };
 pub struct DefaultMolecule {
     nodes: Vec<Node>,
     bonds: HashMap<(usize, usize), (BondOrder, Option<Parity>)>,
-    graph: ArrayGraph
+    graph: DefaultGraph
 }
 
 impl DefaultMolecule {
     pub fn new() -> Self {
         DefaultMolecule {
-            nodes: Vec::new(), bonds: HashMap::new(), graph: ArrayGraph::new()
+            nodes: Vec::new(), bonds: HashMap::new(), graph: DefaultGraph::new()
         }
     }
 
@@ -74,7 +75,7 @@ impl DefaultMolecule {
             adjacency.push(neighbors);
         }
 
-        let graph = ArrayGraph::from_adjacency(adjacency).unwrap();
+        let graph = DefaultGraph::try_from(adjacency).unwrap();
 
         Ok(DefaultMolecule { nodes, graph, bonds })
     }

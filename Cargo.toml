@@ -11,6 +11,8 @@ A cheminformatics toolkit.
 """
 
 [dependencies]
-# gamma = "0.6"
-gamma = { path = "../gamma" }
-purr = "0.6"
+gamma = "0.8.1"
+purr = "0.6.3"
+
+[dev-dependencies]
+pretty_assertions = "0.6.1"
