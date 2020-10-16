@@ -149,127 +149,14 @@ impl From<mol::Element> for Element {
 }
 
 impl Element {
-    pub fn valence_electrons(&self) -> u8 {
-        match self {
-            Element::H  => 1,
-            Element::He => 2,
-            Element::Li => 1,
-            Element::Be => 2,
-            Element::B =>  3,
-            Element::C =>  4,
-            Element::N =>  5,
-            Element::O =>  6,
-            Element::F =>  7,
-            Element::Ne => 8,
-            Element::Na => 1,
-            Element::Mg => 2,
-            Element::Al => 3,
-            Element::Si => 4,
-            Element::P =>  5,
-            Element::S =>  6,
-            Element::Cl => 7,
-            Element::Ar => 8,
-            Element::K =>  1,
-            Element::Ca => 2,
-            Element::Sc => 3,
-            Element::Ti => 4,
-            Element::V =>  5,
-            Element::Cr => 5,
-            Element::Mn => 7,
-            Element::Fe => 8,
-            Element::Co => 9,
-            Element::Ni => 10,
-            Element::Cu => 11,
-            Element::Zn => 12,
-            Element::Ga => 3,
-            Element::Ge => 4,
-            Element::As => 5,
-            Element::Se => 6,
-            Element::Br => 7,
-            Element::Kr => 8,
-            Element::Rb => 1,
-            Element::Sr => 2,
-            Element::Y =>  3,
-            Element::Zr => 4,
-            Element::Nb => 5,
-            Element::Mo => 6,
-            Element::Tc => 7,
-            Element::Ru => 8,
-            Element::Rh => 9,
-            Element::Pd => 10,
-            Element::Ag => 11,
-            Element::Cd => 12,
-            Element::In => 3,
-            Element::Sn => 4,
-            Element::Sb => 5,
-            Element::Te => 6,
-            Element::I =>  7,
-            Element::Xe => 8,
-            Element::Cs => 1,
-            Element::Ba => 2,
-            Element::La => 3,
-            Element::Ce => 4,
-            Element::Pr => 5,
-            Element::Nd => 6,
-            Element::Pm => 7,
-            Element::Sm => 8,
-            Element::Eu => 9,
-            Element::Gd => 10,
-            Element::Tb => 11,
-            Element::Dy => 12,
-            Element::Ho => 13,
-            Element::Er => 14,
-            Element::Tm => 15,
-            Element::Yb => 16,
-            Element::Lu => 17,
-            Element::Hf => 18,
-            Element::Ta => 19,
-            Element::W =>  20,
-            Element::Re => 21,
-            Element::Os => 22,
-            Element::Ir => 22,
-            Element::Pt => 23,
-            Element::Au => 24,
-            Element::Hg => 25,
-            Element::Tl => 3,
-            Element::Pb => 4,
-            Element::Bi => 5,
-            Element::Po => 6,
-            Element::At => 7,
-            Element::Rn => 8,
-            Element::Fr => 1,
-            Element::Ra => 2,
-            Element::Ac => 3,
-            Element::Th => 4,
-            Element::Pa => 5,
-            Element::U =>  6,
-            Element::Np => 7,
-            Element::Pu => 8,
-            Element::Am => 9,
-            Element::Cm => 10,
-            Element::Bk => 11,
-            Element::Cf => 12,
-            Element::Es => 13,
-            Element::Fm => 14,
-            Element::Md => 15,
-            Element::No => 16,
-            Element::Lr => 17,
-            Element::Rf => 18,
-            Element::Db => 19,
-            Element::Sg => 20,
-            Element::Bh => 21,
-            Element::Hs => 22,
-            Element::Mt => 23,
-            Element::Ds => 24,
-            Element::Rg => 25,
-            Element::Cn => 26,
-            Element::Nh => 3,
-            Element::Fl => 4,
-            Element::Mc => 5,
-            Element::Lv => 6,
-            Element::Ts => 7,
-            Element::Og => 8
+    pub fn valence_electrons(&self) -> u16 {
+        let mut result = self.atomic_number();
+
+        if let Some(core) = self.core() {
+            result -= core.atomic_number();
         }
+
+        result
     }
 
     pub fn atomic_number(&self) -> u16 {
@@ -393,5 +280,56 @@ impl Element {
             Element::Ts => 117,
             Element::Og => 118
         }
+    }
+
+    fn core(&self) -> Option<Self> {
+        if self.atomic_number() < 3 {
+            None
+        } else if self.atomic_number() < 11 {
+            Some(Element::He)
+        } else if self.atomic_number() < 19 {
+            Some(Element::Ne)
+        } else if self.atomic_number() < 37 {
+            Some(Element::Ar)
+        } else if self.atomic_number() < 55 {
+            Some(Element::Kr)
+        } else if self.atomic_number() < 87 {
+            Some(Element::Xe)
+        } else {
+            Some(Element::Rn)
+        }
+    }
+}
+
+#[cfg(test)]
+mod valence_electrons {
+    use super::*;
+
+    #[test]
+    fn bromine() {
+        let bromine = Element::Br;
+
+        assert_eq!(bromine.valence_electrons(), 17)
+    }
+
+    #[test]
+    fn iodine() {
+        let iodine = Element::I;
+
+        assert_eq!(iodine.valence_electrons(), 17)
+    }
+
+    #[test]
+    fn astatine() {
+        let astatine = Element::At;
+
+        assert_eq!(astatine.valence_electrons(), 17 + 14)
+    }
+
+    #[test]
+    fn tennesine() {
+        let tennesine = Element::Ts;
+
+        assert_eq!(tennesine.valence_electrons(),  17 + 14)
     }
 }
