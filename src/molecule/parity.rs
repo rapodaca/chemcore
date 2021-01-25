@@ -1,7 +1,18 @@
-#[derive(Clone, Copy, Eq, Hash, PartialEq, Debug)]
+use purr::parts;
+
+#[derive(Debug,PartialEq,Clone)]
 pub enum Parity {
     Positive,
     Negative
+}
+
+impl Into<Parity> for &parts::Parity {
+    fn into(self) -> Parity {
+        match self {
+            parts::Parity::Clockwise => Parity::Positive,
+            parts::Parity::Counterclockwise => Parity::Negative
+        }
+    }
 }
 
 impl Parity {

@@ -1,6 +1,6 @@
-use purr::mol;
+use purr::parts;
 
-#[derive(Clone, Copy, Eq, Hash, PartialEq, Debug)]
+#[derive(PartialEq,Debug,Clone)]
 pub enum Element {
 //  0   1   2   3   4   5   6   7   8   9
         H,  He, Li, Be, B,  C,  N,  O,  F,  //  0
@@ -17,149 +17,190 @@ pub enum Element {
     Ds, Rg, Cn, Nh, Fl, Mc, Lv, Ts, Og      // 11
 }
 
-impl Default for Element {
-    fn default() -> Self {
-        Self::C
+impl Into<Element> for &parts::Aliphatic {
+    fn into(self) -> Element {
+        match self {
+           parts::Aliphatic::B => Element::B,
+           parts::Aliphatic::C => Element::C,
+           parts::Aliphatic::N => Element::N,
+           parts::Aliphatic::O => Element::O,
+           parts::Aliphatic::P => Element::P,
+           parts::Aliphatic::S => Element::S,
+           parts::Aliphatic::F => Element::F,
+           parts::Aliphatic::Cl => Element::Cl,
+           parts::Aliphatic::Br => Element::Br,
+           parts::Aliphatic::I => Element::I,
+           parts::Aliphatic::At => Element::At,
+           parts::Aliphatic::Ts => Element::Ts
+        }
     }
 }
 
-impl From<mol::Element> for Element {
-    fn from(element: mol::Element) -> Self {
-        match element {
-            mol::Element::H  => Element::H,
-            mol::Element::He => Element::He,
-            mol::Element::Li => Element::Li,
-            mol::Element::Be => Element::Be,
-            mol::Element::B =>  Element::B,
-            mol::Element::C =>  Element::C,
-            mol::Element::N =>  Element::N,
-            mol::Element::O =>  Element::O,
-            mol::Element::F =>  Element::F,
-            mol::Element::Ne => Element::Ne,
-            mol::Element::Na => Element::Na,
-            mol::Element::Mg => Element::Mg,
-            mol::Element::Al => Element::Al,
-            mol::Element::Si => Element::Si,
-            mol::Element::P =>  Element::P,
-            mol::Element::S =>  Element::S,
-            mol::Element::Cl => Element::Cl,
-            mol::Element::Ar => Element::Ar,
-            mol::Element::K =>  Element::K,
-            mol::Element::Ca => Element::Ca,
-            mol::Element::Sc => Element::Sc,
-            mol::Element::Ti => Element::Ti,
-            mol::Element::V =>  Element::V,
-            mol::Element::Cr => Element::Cr,
-            mol::Element::Mn => Element::Mn,
-            mol::Element::Fe => Element::Fe,
-            mol::Element::Co => Element::Co,
-            mol::Element::Ni => Element::Ni,
-            mol::Element::Cu => Element::Cu,
-            mol::Element::Zn => Element::Zn,
-            mol::Element::Ga => Element::Ga,
-            mol::Element::Ge => Element::Ge,
-            mol::Element::As => Element::As,
-            mol::Element::Se => Element::Se,
-            mol::Element::Br => Element::Br,
-            mol::Element::Kr => Element::Kr,
-            mol::Element::Rb => Element::Rb,
-            mol::Element::Sr => Element::Sr,
-            mol::Element::Y =>  Element::Y,
-            mol::Element::Zr => Element::Zr,
-            mol::Element::Nb => Element::Nb,
-            mol::Element::Mo => Element::Mo,
-            mol::Element::Tc => Element::Tc,
-            mol::Element::Ru => Element::Ru,
-            mol::Element::Rh => Element::Rh,
-            mol::Element::Pd => Element::Pd,
-            mol::Element::Ag => Element::Ag,
-            mol::Element::Cd => Element::Cd,
-            mol::Element::In => Element::In,
-            mol::Element::Sn => Element::Sn,
-            mol::Element::Sb => Element::Sb,
-            mol::Element::Te => Element::Te,
-            mol::Element::I =>  Element::I,
-            mol::Element::Xe => Element::Xe,
-            mol::Element::Cs => Element::Cs,
-            mol::Element::Ba => Element::Ba,
-            mol::Element::La => Element::La,
-            mol::Element::Ce => Element::Ce,
-            mol::Element::Pr => Element::Pr,
-            mol::Element::Nd => Element::Nd,
-            mol::Element::Pm => Element::Pm,
-            mol::Element::Sm => Element::Sm,
-            mol::Element::Eu => Element::Eu,
-            mol::Element::Gd => Element::Gd,
-            mol::Element::Tb => Element::Tb,
-            mol::Element::Dy => Element::Dy,
-            mol::Element::Ho => Element::Ho,
-            mol::Element::Er => Element::Er,
-            mol::Element::Tm => Element::Tm,
-            mol::Element::Yb => Element::Yb,
-            mol::Element::Lu => Element::Lu,
-            mol::Element::Hf => Element::Hf,
-            mol::Element::Ta => Element::Ta,
-            mol::Element::W =>  Element::W,
-            mol::Element::Re => Element::Re,
-            mol::Element::Os => Element::Os,
-            mol::Element::Ir => Element::Ir,
-            mol::Element::Pt => Element::Pt,
-            mol::Element::Au => Element::Au,
-            mol::Element::Hg => Element::Hg,
-            mol::Element::Tl => Element::Tl,
-            mol::Element::Pb => Element::Pb,
-            mol::Element::Bi => Element::Bi,
-            mol::Element::Po => Element::Po,
-            mol::Element::At => Element::At,
-            mol::Element::Rn => Element::Rn,
-            mol::Element::Fr => Element::Fr,
-            mol::Element::Ra => Element::Ra,
-            mol::Element::Ac => Element::Ac,
-            mol::Element::Th => Element::Th,
-            mol::Element::Pa => Element::Pa,
-            mol::Element::U =>  Element::U,
-            mol::Element::Np => Element::Np,
-            mol::Element::Pu => Element::Pu,
-            mol::Element::Am => Element::Am,
-            mol::Element::Cm => Element::Cm,
-            mol::Element::Bk => Element::Bk,
-            mol::Element::Cf => Element::Cf,
-            mol::Element::Es => Element::Es,
-            mol::Element::Fm => Element::Fm,
-            mol::Element::Md => Element::Md,
-            mol::Element::No => Element::No,
-            mol::Element::Lr => Element::Lr,
-            mol::Element::Rf => Element::Rf,
-            mol::Element::Db => Element::Db,
-            mol::Element::Sg => Element::Sg,
-            mol::Element::Bh => Element::Bh,
-            mol::Element::Hs => Element::Hs,
-            mol::Element::Mt => Element::Mt,
-            mol::Element::Ds => Element::Ds,
-            mol::Element::Rg => Element::Rg,
-            mol::Element::Cn => Element::Cn,
-            mol::Element::Nh => Element::Nh,
-            mol::Element::Fl => Element::Fl,
-            mol::Element::Mc => Element::Mc,
-            mol::Element::Lv => Element::Lv,
-            mol::Element::Ts => Element::Ts,
-            mol::Element::Og => Element::Og
+impl Into<Element> for &parts::Aromatic {
+    fn into(self) -> Element {
+        match self {
+           parts::Aromatic::B => Element::B,
+           parts::Aromatic::C => Element::C,
+           parts::Aromatic::N => Element::N,
+           parts::Aromatic::O => Element::O,
+           parts::Aromatic::P => Element::P,
+           parts::Aromatic::S => Element::S
+        }
+    }
+}
+
+impl Into<Element> for &parts::BracketAromatic {
+    fn into(self) -> Element {
+        match self {
+            parts::BracketAromatic::As => Element::As,
+            parts::BracketAromatic::B => Element::B,
+            parts::BracketAromatic::C => Element::C,
+            parts::BracketAromatic::N => Element::N,
+            parts::BracketAromatic::O => Element::O,
+            parts::BracketAromatic::P => Element::P,
+            parts::BracketAromatic::S => Element::S,
+            parts::BracketAromatic::Se => Element::Se
+        }
+    }
+}
+
+impl Into<Element> for &parts::Element {
+    fn into(self) -> Element {
+        match self {
+            parts::Element::H  => Element::H,
+            parts::Element::He => Element::He,
+            parts::Element::Li => Element::Li,
+            parts::Element::Be => Element::Be,
+            parts::Element::B =>  Element::B,
+            parts::Element::C =>  Element::C,
+            parts::Element::N =>  Element::N,
+            parts::Element::O =>  Element::O,
+            parts::Element::F =>  Element::F,
+            parts::Element::Ne => Element::Ne,
+            parts::Element::Na => Element::Na,
+            parts::Element::Mg => Element::Mg,
+            parts::Element::Al => Element::Al,
+            parts::Element::Si => Element::Si,
+            parts::Element::P =>  Element::P,
+            parts::Element::S =>  Element::S,
+            parts::Element::Cl => Element::Cl,
+            parts::Element::Ar => Element::Ar,
+            parts::Element::K =>  Element::K,
+            parts::Element::Ca => Element::Ca,
+            parts::Element::Sc => Element::Sc,
+            parts::Element::Ti => Element::Ti,
+            parts::Element::V =>  Element::V,
+            parts::Element::Cr => Element::Cr,
+            parts::Element::Mn => Element::Mn,
+            parts::Element::Fe => Element::Fe,
+            parts::Element::Co => Element::Co,
+            parts::Element::Ni => Element::Ni,
+            parts::Element::Cu => Element::Cu,
+            parts::Element::Zn => Element::Zn,
+            parts::Element::Ga => Element::Ga,
+            parts::Element::Ge => Element::Ge,
+            parts::Element::As => Element::As,
+            parts::Element::Se => Element::Se,
+            parts::Element::Br => Element::Br,
+            parts::Element::Kr => Element::Kr,
+            parts::Element::Rb => Element::Rb,
+            parts::Element::Sr => Element::Sr,
+            parts::Element::Y =>  Element::Y,
+            parts::Element::Zr => Element::Zr,
+            parts::Element::Nb => Element::Nb,
+            parts::Element::Mo => Element::Mo,
+            parts::Element::Tc => Element::Tc,
+            parts::Element::Ru => Element::Ru,
+            parts::Element::Rh => Element::Rh,
+            parts::Element::Pd => Element::Pd,
+            parts::Element::Ag => Element::Ag,
+            parts::Element::Cd => Element::Cd,
+            parts::Element::In => Element::In,
+            parts::Element::Sn => Element::Sn,
+            parts::Element::Sb => Element::Sb,
+            parts::Element::Te => Element::Te,
+            parts::Element::I =>  Element::I,
+            parts::Element::Xe => Element::Xe,
+            parts::Element::Cs => Element::Cs,
+            parts::Element::Ba => Element::Ba,
+            parts::Element::La => Element::La,
+            parts::Element::Ce => Element::Ce,
+            parts::Element::Pr => Element::Pr,
+            parts::Element::Nd => Element::Nd,
+            parts::Element::Pm => Element::Pm,
+            parts::Element::Sm => Element::Sm,
+            parts::Element::Eu => Element::Eu,
+            parts::Element::Gd => Element::Gd,
+            parts::Element::Tb => Element::Tb,
+            parts::Element::Dy => Element::Dy,
+            parts::Element::Ho => Element::Ho,
+            parts::Element::Er => Element::Er,
+            parts::Element::Tm => Element::Tm,
+            parts::Element::Yb => Element::Yb,
+            parts::Element::Lu => Element::Lu,
+            parts::Element::Hf => Element::Hf,
+            parts::Element::Ta => Element::Ta,
+            parts::Element::W =>  Element::W,
+            parts::Element::Re => Element::Re,
+            parts::Element::Os => Element::Os,
+            parts::Element::Ir => Element::Ir,
+            parts::Element::Pt => Element::Pt,
+            parts::Element::Au => Element::Au,
+            parts::Element::Hg => Element::Hg,
+            parts::Element::Tl => Element::Tl,
+            parts::Element::Pb => Element::Pb,
+            parts::Element::Bi => Element::Bi,
+            parts::Element::Po => Element::Po,
+            parts::Element::At => Element::At,
+            parts::Element::Rn => Element::Rn,
+            parts::Element::Fr => Element::Fr,
+            parts::Element::Ra => Element::Ra,
+            parts::Element::Ac => Element::Ac,
+            parts::Element::Th => Element::Th,
+            parts::Element::Pa => Element::Pa,
+            parts::Element::U =>  Element::U,
+            parts::Element::Np => Element::Np,
+            parts::Element::Pu => Element::Pu,
+            parts::Element::Am => Element::Am,
+            parts::Element::Cm => Element::Cm,
+            parts::Element::Bk => Element::Bk,
+            parts::Element::Cf => Element::Cf,
+            parts::Element::Es => Element::Es,
+            parts::Element::Fm => Element::Fm,
+            parts::Element::Md => Element::Md,
+            parts::Element::No => Element::No,
+            parts::Element::Lr => Element::Lr,
+            parts::Element::Rf => Element::Rf,
+            parts::Element::Db => Element::Db,
+            parts::Element::Sg => Element::Sg,
+            parts::Element::Bh => Element::Bh,
+            parts::Element::Hs => Element::Hs,
+            parts::Element::Mt => Element::Mt,
+            parts::Element::Ds => Element::Ds,
+            parts::Element::Rg => Element::Rg,
+            parts::Element::Cn => Element::Cn,
+            parts::Element::Nh => Element::Nh,
+            parts::Element::Fl => Element::Fl,
+            parts::Element::Mc => Element::Mc,
+            parts::Element::Lv => Element::Lv,
+            parts::Element::Ts => Element::Ts,
+            parts::Element::Og => Element::Og
         }
     }
 }
 
 impl Element {
-    pub fn valence_electrons(&self) -> u16 {
+    pub fn valence_electrons(&self) -> u8 {
         let mut result = self.atomic_number();
 
         if let Some(core) = self.core() {
             result -= core.atomic_number();
         }
 
-        result
+        result.into()
     }
 
-    pub fn atomic_number(&self) -> u16 {
+    pub fn atomic_number(&self) -> u8 {
         match self {
             Element::H  => 1,
             Element::He => 2,

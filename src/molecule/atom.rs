@@ -1,19 +1,10 @@
 use super::{ Element, Parity };
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug,PartialEq,Clone,Default)]
 pub struct Atom {
-    pub element: Element,
-    pub hydrogens: u8,
-    pub ion: i8,
+    pub element: Option<Element>,
     pub isotope: Option<u16>,
-    pub parity: Option<Parity>
-}
-
-impl Atom {
-    pub fn new(
-        element: Element, hydrogens: u8, ion: i8, isotope: Option<u16>,
-        parity: Option<Parity>
-    ) -> Self {
-        Atom { element, hydrogens, ion, isotope, parity }
-    }
+    pub electrons: u8,
+    pub parity: Option<Parity>,
+    pub hydrogens: u8
 }

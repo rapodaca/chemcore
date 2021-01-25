@@ -1,18 +1,15 @@
-use purr::read::Error as PurrError;
+use gamma::graph::Error as GraphError;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug,PartialEq)]
 pub enum Error {
-    Hypervalent(usize),
-    ImpossibleIsotope(usize),
-    AtomParityNotAllowed(usize),
-    UnsupportedBond(usize, usize),
-    InvalidConformation(usize, usize),
-    CanNotKekulize,
-    Purr(PurrError)
+    Valence(usize),
+    Isotope(usize),
+    Parity(usize),
+    Graph(GraphError)
 }
 
-impl std::convert::From<PurrError> for Error {
-    fn from(err: PurrError) -> Error {
-        Error::Purr(err)
+impl From<GraphError> for Error {
+    fn from(err: GraphError) -> Error {
+        Error::Graph(err)
     }
 }
