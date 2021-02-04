@@ -8,6 +8,7 @@ pub enum Error {
     Isotope(usize),
     Parity(usize),
     ChargedStar(usize),
+    IncompatibleJoin(usize, usize),
     Kekulization,
     EndOfLine
 }

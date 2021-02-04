@@ -1,8 +1,8 @@
 use purr::{ graph };
 use purr::parts::BondKind;
 
-use crate::molecule::{ Bond, Parity };
-use super::Error;
+use crate::molecule::{ Bond };
+use super::{ Error, trigonal_parity };
 
 pub fn to_bond(
     sid: usize,
@@ -21,8 +21,14 @@ pub fn to_bond(
             return Err(Error::BondKind(trace[bond.tid]))
         },
         BondKind::Double => {
-            let left_parity = trigonal_parity(sid, atoms, trace)?;
-            let right_parity = trigonal_parity(bond.tid, atoms, trace)?;
+            let left_parity = match trigonal_parity(&atoms[sid].bonds) {
+                Ok(parity) => parity,
+                Err(()) => return Err(Error::BondKind(trace[sid]))
+            };
+            let right_parity = match trigonal_parity(&atoms[bond.tid].bonds) {
+                Ok(parity) => parity,
+                Err(()) => return Err(Error::BondKind(trace[bond.tid]))
+            };
 
             if let Some(left) = left_parity {
                 if let Some(right) = &right_parity {
@@ -59,159 +65,151 @@ fn has_double(sid: usize, bond: &graph::Bond, atoms: &[graph::Atom]) -> bool {
     target.bonds.iter().any(|bond| bond.kind == BondKind::Double)
 }
 
-fn trigonal_parity(
-    id: usize, atoms: &[graph::Atom], trace: &[usize]
-) -> Result<Option<Parity>, Error> {
-    let bonds = &atoms[id].bonds;
-    let first = match bonds.get(0) {
-        Some(first) => first,
-        None => return Ok(None)
-    };
-    let second = match bonds.get(1) {
-        Some(second) => second,
-        None => return Ok(None)
-    };
-    let third = bonds.get(2);
+#[cfg(test)]
+mod tests {
+    use pretty_assertions::assert_eq;
+    use purr::read::{ Reading, read };
+    use purr::graph::{ from_tree, Bond as PurrBond };
+    use crate::molecule::Parity;
+    use super::*;
 
-    match first.kind {
-        BondKind::Up => match second.kind {
-            BondKind::Up => Err(Error::BondKind(trace[second.tid])),
-            BondKind::Down => match third {
-                Some(third) => match third.kind {
-                    BondKind::Double =>  if bonds.len() == 3 {
-                        Ok(Some(Parity::Positive))
-                    } else {
-                        Err(Error::BondKind(trace[first.tid]))
-                    },
-                    _ => Err(Error::BondKind(trace[first.tid]))
-                },
-                None => unreachable!()
-            },
-            BondKind::Double => match third {
-                Some(third) => match third.kind {
-                    BondKind::Down |
-                    BondKind::Elided => if bonds.len() == 3 {
-                        Ok(Some(Parity::Positive))
-                    } else {
-                        Err(Error::BondKind(trace[first.tid]))
-                    },
-                    _ => Err(Error::BondKind(trace[third.tid]))
-                },
-                None => Ok(Some(Parity::Positive))
-            },
-            BondKind::Elided => match third {
-                Some(third) => match third.kind {
-                    BondKind::Double => if bonds.len() == 3 {
-                        Ok(Some(Parity::Positive))
-                    } else {
-                        Err(Error::BondKind(trace[first.tid]))
-                    },
-                    _ => Err(Error::BondKind(trace[third.tid]))
-                },
-                None => unreachable!()
-            },
-            _ => Err(Error::BondKind(trace[second.tid]))
-        },
-        BondKind::Down => match second.kind {
-            BondKind::Down => Err(Error::BondKind(trace[second.tid])),
-            BondKind::Up => match third {
-                Some(third) => match third.kind {
-                    BondKind::Double => if bonds.len() == 3 {
-                        Ok(Some(Parity::Negative))
-                    } else {
-                        Err(Error::BondKind(trace[first.tid]))
-                    },
-                    _ => Err(Error::BondKind(trace[first.tid]))
-                },
-                None => unreachable!()
-            },
-            BondKind::Double => match third {
-                Some(third) => match third.kind {
-                    BondKind::Up |
-                    BondKind::Elided => if bonds.len() == 3 {
-                        Ok(Some(Parity::Negative))
-                    } else {
-                        Err(Error::BondKind(trace[first.tid]))
-                    },
-                    _ => Err(Error::BondKind(trace[third.tid]))
-                },
-                None => Ok(Some(Parity::Negative))
-            },
-            BondKind::Elided => match third {
-                Some(third) => match third.kind {
-                    BondKind::Double => if bonds.len() == 3 {
-                        Ok(Some(Parity::Negative))
-                    } else {
-                        Err(Error::BondKind(trace[first.tid]))
-                    },
-                    _ => Err(Error::BondKind(trace[third.tid]))
-                },
-                None => unreachable!()
-            },
-            _ => Err(Error::BondKind(trace[second.tid]))
+    #[test]
+    fn elided() {
+        let Reading { root, trace } = read("CC").unwrap();
+        let atoms = from_tree(root).unwrap();
+        let input = PurrBond::new(BondKind::Elided, 1);
+        let bond = to_bond(0, &input, &atoms, &trace);
 
-        },
-        BondKind::Double => match second.kind {
-            BondKind::Up => match third {
-                Some(third) => match third.kind {
-                    BondKind::Up => Err(Error::BondKind(trace[third.tid])),
-                    BondKind::Down => if bonds.len() == 3 {
-                        Ok(Some(Parity::Negative))
-                    } else {
-                        Err(Error::BondKind(trace[second.tid]))
-                    },
-                    BondKind::Elided => if bonds.len() == 3 {
-                        Ok(Some(Parity::Negative))
-                    } else {
-                        Err(Error::BondKind(trace[bonds[3].tid]))
-                    }
-                    _ => Err(Error::BondKind(trace[third.tid]))
-                },
-                None => Ok(Some(Parity::Negative))
-            },
-            BondKind::Down => match third {
-                Some(third) => match third.kind {
-                    BondKind::Down => Err(Error::BondKind(trace[third.tid])),
-                    BondKind::Up => if bonds.len() == 3 {
-                        Ok(Some(Parity::Positive))
-                    } else {
-                        Err(Error::BondKind(trace[second.tid]))
-                    },
-                    BondKind::Elided => if bonds.len() == 3 {
-                        Ok(Some(Parity::Positive))
-                    } else {
-                        Err(Error::BondKind(trace[bonds[3].tid]))
-                    },
-                    _ => Err(Error::BondKind(trace[third.tid]))
-                },
-                None => Ok(Some(Parity::Positive))
-            }
-            _ => match third {
-                Some(third) => match third.kind {
-                    BondKind::Up |
-                    BondKind::Down => Err(Error::BondKind(trace[second.tid])),
-                    _ => Ok(None)
-                },
-                None => Ok(None)
-            }
-        }
-        BondKind::Elided => match second.kind {
-            BondKind::Double => match third {
-                Some(third) => match third.kind {
-                    BondKind::Up => Ok(Some(Parity::Negative)),
-                    BondKind::Down => Ok(Some(Parity::Positive)),
-                    _ => Ok(None)
-                },
-                None => Ok(None)
-            },
-            BondKind::Up => Ok(Some(Parity::Negative)),
-            BondKind::Down => Ok(Some(Parity::Positive)),
-            _ => Ok(None)
-        }
-        _ => match second.kind {
-            BondKind::Up |
-            BondKind::Down => Err(Error::BondKind(trace[first.tid])),
-            _ => Ok(None)
-        }
+        assert_eq!(bond, Ok(Bond::new(2, None, 1)))
+    }
+
+    #[test]
+    fn single() {
+        let Reading { root, trace } = read("C-C").unwrap();
+        let atoms = from_tree(root).unwrap();
+        let input = PurrBond::new(BondKind::Single, 1);
+        let bond = to_bond(0, &input, &atoms, &trace);
+
+        assert_eq!(bond, Ok(Bond::new(2, None, 1)))
+    }
+
+    #[test]
+    fn double() {
+        let Reading { root, trace } = read("C=C").unwrap();
+        let atoms = from_tree(root).unwrap();
+        let input = PurrBond::new(BondKind::Double, 1);
+        let bond = to_bond(0, &input, &atoms, &trace);
+
+        assert_eq!(bond, Ok(Bond::new(4, None, 1)))
+    }
+
+    #[test]
+    fn double_up() {
+        let Reading { root, trace } = read("C=C/C").unwrap();
+        let atoms = from_tree(root).unwrap();
+        let input = PurrBond::new(BondKind::Double, 1);
+        let bond = to_bond(0, &input, &atoms, &trace);
+
+        assert_eq!(bond, Ok(Bond::new(4, None, 1)))
+    }
+
+    #[test]
+    fn double_up_down() {
+        let Reading { root, trace } = read("C=C(/C)\\C").unwrap();
+        let atoms = from_tree(root).unwrap();
+        let input = PurrBond::new(BondKind::Double, 1);
+        let bond = to_bond(0, &input, &atoms, &trace);
+
+        assert_eq!(bond, Ok(Bond::new(4, None, 1)))
+    }
+
+    #[test]
+    fn double_up_up_elided() {
+        let Reading { root, trace } = read("C=P(/C)(/C)C").unwrap();
+        let atoms = from_tree(root).unwrap();
+        let input = PurrBond::new(BondKind::Double, 1);
+        let bond = to_bond(0, &input, &atoms, &trace);
+
+        assert_eq!(bond, Ok(Bond::new(4, None, 1)))
+    }
+
+    #[test]
+    fn up_double_up() {
+        let Reading { root, trace } = read("C/C=C/C").unwrap();
+        let atoms = from_tree(root).unwrap();
+        let input = PurrBond::new(BondKind::Double, 2);
+        let bond = to_bond(1, &input, &atoms, &trace);
+
+        assert_eq!(bond, Ok(Bond::new(4, Some(Parity::Negative), 2)))
+    }
+
+    #[test]
+    fn up_double_down() {
+        let Reading { root, trace } = read("C/C=C\\C").unwrap();
+        let atoms = from_tree(root).unwrap();
+        let input = PurrBond::new(BondKind::Double, 2);
+        let bond = to_bond(1, &input, &atoms, &trace);
+
+        assert_eq!(bond, Ok(Bond::new(4, Some(Parity::Positive), 2)))
+    }
+
+    #[test]
+    fn up_up_double_down() {
+        let Reading { root, trace } = read("C/C(/C)=C\\C").unwrap();
+        let atoms = from_tree(root).unwrap();
+        let input = PurrBond::new(BondKind::Double, 3);
+        let bond = to_bond(1, &input, &atoms, &trace);
+
+        assert_eq!(bond, Ok(Bond::new(4, Some(Parity::Negative), 3)))
+    }
+
+    #[test]
+    fn up_up_double_up() {
+        let Reading { root, trace } = read("C/C(/C)=C/C").unwrap();
+        let atoms = from_tree(root).unwrap();
+        let input = PurrBond::new(BondKind::Double, 3);
+        let bond = to_bond(1, &input, &atoms, &trace);
+
+        assert_eq!(bond, Ok(Bond::new(4, Some(Parity::Positive), 3)))
+    }
+
+    #[test]
+    fn up() {
+        let Reading { root, trace } = read("C/C=C/C").unwrap();
+        let atoms = from_tree(root).unwrap();
+        let input = PurrBond::new(BondKind::Double, 1);
+        let bond = to_bond(0, &input, &atoms, &trace);
+
+        assert_eq!(bond, Ok(Bond::new(4, None, 1)))
+    }
+
+    #[test]
+    fn down() {
+        let Reading { root, trace } = read("C\\C=C/C").unwrap();
+        let atoms = from_tree(root).unwrap();
+        let input = PurrBond::new(BondKind::Double, 1);
+        let bond = to_bond(0, &input, &atoms, &trace);
+
+        assert_eq!(bond, Ok(Bond::new(4, None, 1)))
+    }
+
+    #[test]
+    fn triple() {
+        let Reading { root, trace } = read("C#C").unwrap();
+        let atoms = from_tree(root).unwrap();
+        let input = PurrBond::new(BondKind::Triple, 1);
+        let bond = to_bond(0, &input, &atoms, &trace);
+
+        assert_eq!(bond, Ok(Bond::new(6, None, 1)))
+    }
+
+    #[test]
+    fn quadruple() {
+        let Reading { root, trace } = read("C#C").unwrap();
+        let atoms = from_tree(root).unwrap();
+        let input = PurrBond::new(BondKind::Quadruple, 1);
+        let bond = to_bond(0, &input, &atoms, &trace);
+
+        assert_eq!(bond, Ok(Bond::new(8, None, 1)))
     }
 }

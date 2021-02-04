@@ -65,14 +65,14 @@ mod tests {
 
     #[test]
     fn methane() {
-        let atoms = from_tree(read("C").unwrap().root);
+        let atoms = from_tree(read("C").unwrap().root).unwrap();
 
         assert_eq!(pi_subgraph(&atoms), DefaultGraph::new())
     }
 
     #[test]
     fn methane_aromatic() {
-        let atoms = from_tree(read("c").unwrap().root);
+        let atoms = from_tree(read("c").unwrap().root).unwrap();
 
         assert_eq!(pi_subgraph(&atoms), DefaultGraph::try_from(vec![
             vec![ ]
@@ -81,14 +81,14 @@ mod tests {
 
     #[test]
     fn ethane() {
-        let atoms = from_tree(read("CC").unwrap().root);
+        let atoms = from_tree(read("CC").unwrap().root).unwrap();
 
         assert_eq!(pi_subgraph(&atoms), DefaultGraph::new())
     }
 
     #[test]
     fn ethene_aromatic_atoms() {
-        let atoms = from_tree(read("cc").unwrap().root);
+        let atoms = from_tree(read("cc").unwrap().root).unwrap();
 
         assert_eq!(pi_subgraph(&atoms), DefaultGraph::try_from(vec![
             vec![ 1 ],
@@ -98,7 +98,7 @@ mod tests {
 
     #[test]
     fn propene_aromatic_atoms() {
-        let atoms = from_tree(read("ccC").unwrap().root);
+        let atoms = from_tree(read("ccC").unwrap().root).unwrap();
 
         assert_eq!(pi_subgraph(&atoms), DefaultGraph::try_from(vec![
             vec![ 1 ],
@@ -108,7 +108,7 @@ mod tests {
 
     #[test]
     fn carbon_iron_aromatic() {
-        let atoms = from_tree(read("C:[Fe]").unwrap().root);
+        let atoms = from_tree(read("C:[Fe]").unwrap().root).unwrap();
 
         assert_eq!(pi_subgraph(&atoms), DefaultGraph::try_from(vec![
             vec![ ]
@@ -117,7 +117,7 @@ mod tests {
 
     #[test]
     fn iron_carbon_aromatic() {
-        let atoms = from_tree(read("[Fe]:C").unwrap().root);
+        let atoms = from_tree(read("[Fe]:C").unwrap().root).unwrap();
         let mut result = DefaultGraph::new();
 
         result.add_node(1).unwrap();
@@ -127,7 +127,7 @@ mod tests {
 
     #[test]
     fn furan_all_aromatic() {
-        let atoms = from_tree(read("c1ccco1").unwrap().root);
+        let atoms = from_tree(read("c1ccco1").unwrap().root).unwrap();
 
         assert_eq!(pi_subgraph(&atoms), DefaultGraph::try_from(vec![
             (0, 1),
@@ -138,7 +138,7 @@ mod tests {
 
     #[test]
     fn pyrrole_all_aromatic() {
-        let atoms = from_tree(read("c1ccc[nH]1").unwrap().root);
+        let atoms = from_tree(read("c1ccc[nH]1").unwrap().root).unwrap();
 
         assert_eq!(pi_subgraph(&atoms), DefaultGraph::try_from(vec![
             (0, 1),
@@ -149,7 +149,7 @@ mod tests {
 
     #[test]
     fn benzene_all_aromatic() {
-        let atoms = from_tree(read("c1ccccc1").unwrap().root);
+        let atoms = from_tree(read("c1ccccc1").unwrap().root).unwrap();
 
         assert_eq!(pi_subgraph(&atoms), DefaultGraph::try_from(vec![
             vec![ 5, 1 ],

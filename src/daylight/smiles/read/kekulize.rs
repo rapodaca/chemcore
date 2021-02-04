@@ -42,23 +42,23 @@ mod tests {
 
     #[test]
     fn unkekulizable() {
-        let mut atoms = from_tree(read("ccc").unwrap().root);
+        let mut atoms = from_tree(read("ccc").unwrap().root).unwrap();
 
         assert_eq!(kekulize(&mut atoms), Err(Error::Kekulization))
     }
 
     #[test]
     fn carbon_aromatic_carbon() {
-        let mut atoms = from_tree(read("C:C").unwrap().root);
+        let mut atoms = from_tree(read("C:C").unwrap().root).unwrap();
 
         kekulize(&mut atoms).unwrap();
 
-        assert_eq!(atoms, from_tree(read("C=C").unwrap().root))
+        assert_eq!(atoms, from_tree(read("C=C").unwrap().root).unwrap())
     }
 
     #[test]
     fn benzene_aromatic_atoms() {
-        let mut atoms = from_tree(read("c1ccccc1").unwrap().root);
+        let mut atoms = from_tree(read("c1ccccc1").unwrap().root).unwrap();
 
         kekulize(&mut atoms).unwrap();
 

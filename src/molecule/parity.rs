@@ -10,7 +10,8 @@ impl Into<Parity> for &parts::Parity {
     fn into(self) -> Parity {
         match self {
             parts::Parity::Clockwise => Parity::Positive,
-            parts::Parity::Counterclockwise => Parity::Negative
+            parts::Parity::Counterclockwise => Parity::Negative,
+            _ => unimplemented!("unsupported parity")
         }
     }
 }

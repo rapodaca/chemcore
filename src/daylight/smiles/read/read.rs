@@ -2,16 +2,22 @@ use std::collections::HashMap;
 
 use purr::read::{ read as read_tree, Reading };
 use purr::parts;
-use purr::graph::{ from_tree };
+use purr::graph::{ from_tree, Error as GraphError };
 
 use crate::molecule::{ DefaultMolecule };
 use super::{ to_node, kekulize, Error };
 
 pub fn read(
-    smiles: &str, map: Option<&mut HashMap<usize, usize>>
+    smiles: &str, map: Option<&mut HashMap<usize, u16>>
 ) -> Result<DefaultMolecule, Error> {
     let Reading { root, trace } = read_tree(smiles)?;
-    let mut atoms = from_tree(root);
+    let mut atoms = match from_tree(root) {
+        Ok(atoms) => atoms,
+        Err(error) => match error {
+            GraphError::IncompatibleJoin(first, second) =>
+                return Err(Error::IncompatibleJoin(trace[first], trace[second]))
+        }
+    };
 
     kekulize(&mut atoms)?;
 
@@ -21,7 +27,7 @@ pub fn read(
         for (i, atom) in atoms.iter().enumerate() {
             if let parts::AtomKind::Bracket { map: klass, .. } = &atom.kind {
                 if let Some(klass) = klass {
-                    map.insert(i, *klass as usize);
+                    map.insert(i, klass.into());
                 }
             }
         }
@@ -63,6 +69,11 @@ mod tests {
     #[test]
     fn hypervalence() {
         assert_eq!(read("C=C(C)(C)C", None), Err(Error::Valence(2)))
+    }
+
+    #[test]
+    fn incompatible_join() {
+        assert_eq!(read("C-1CC=1", None), Err(Error::IncompatibleJoin(0, 4)))
     }
 
     #[test]

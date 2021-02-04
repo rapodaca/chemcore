@@ -85,14 +85,17 @@ fn bare_to_atom(
 }
 
 fn bracket_to_atom(
-    isotope: &Option<u16>,
+    isotope: &Option<parts::Number>,
     symbol: &parts::BracketSymbol,
-    hcount: &Option<u8>,
-    charge: &Option<i8>,
+    hcount: &Option<parts::VirtualHydrogen>,
+    charge: &Option<parts::Charge>,
     parity: &Option<parts::Parity>,
     bonds: &Vec<graph::Bond>
 ) -> Result<Atom, AtomError> {
-    let charge = charge.unwrap_or_default();
+    let charge = match charge {
+        Some(charge) => charge.into(),
+        None => 0
+    };
     let element: Option<Element> = match symbol {
         parts::BracketSymbol::Star => if charge == 0 {
             None
@@ -102,8 +105,11 @@ fn bracket_to_atom(
         parts::BracketSymbol::Aromatic(aromatic) => Some(aromatic.into()),
         parts::BracketSymbol::Element(element) => Some(element.into())
     };
-    let isotope = to_isotope(&element, *isotope)?;
-    let hydrogens = hcount.unwrap_or_default();
+    let isotope = to_isotope(&element, isotope)?;
+    let hydrogens = match hcount {
+        Some(hcount) => hcount.into(),
+        None => 0
+    };
     let electrons = to_electrons(&element, hydrogens, charge, bonds)?;
     let parity = to_parity(hydrogens, parity, bonds)?;
 
@@ -117,20 +123,21 @@ fn bracket_to_atom(
 }
 
 fn to_isotope(
-    element: &Option<Element>, isotope: Option<u16>
+    element: &Option<Element>, isotope: &Option<parts::Number>
 ) -> Result<Option<u16>, AtomError> {
+    let isotope = match isotope {
+        Some(isotope) => isotope.into(),
+        None => return Ok(None)
+    };
     let element = match element {
         Some(element) => element,
-        None => return Ok(isotope)
+        None => return Ok(Some(isotope))
     };
 
-    match isotope {
-        Some(isotope) => if isotope < u16::from(element.atomic_number()) {
-            return Err(AtomError::Isotope)
-        } else {
-            Ok(Some(isotope))
-        },
-        None => Ok(None)
+    if isotope < u16::from(element.atomic_number()) {
+        return Err(AtomError::Isotope)
+    } else {
+        Ok(Some(isotope))
     }
 }
 
@@ -141,25 +148,20 @@ fn to_electrons(
         Some(element) => element,
         None => return Ok(0)
     };
-    let mut bonding = hydrogens;
+    let mut bonding = hydrogens as i16;
 
     for bond_spec in bonds {
-        bonding = match bonding.checked_add(bond_spec.order()) {
-            Some(sum) => sum,
-            None => return Err(AtomError::Valence)
-        }
+        bonding += bond_spec.order() as i16;
     }
 
-    let nonbonding = element.valence_electrons();
+    let mut result = element.valence_electrons() as i16;
 
-    match nonbonding.checked_sub(bonding) {
-        Some(diff) => {
-            match u8::try_from(diff as i16 - ion as i16) {
-                Ok(result) => Ok(result),
-                Err(_) => Err(AtomError::Valence)
-            }
-        },
-        None => Err(AtomError::Valence)
+    result -= ion as i16;
+    result -= bonding;
+
+    match u8::try_from(result) {
+        Ok(result) => Ok(result),
+        Err(_) => Err(AtomError::Valence)
     }
 }
 
@@ -204,7 +206,7 @@ mod tests {
     #[test]
     fn bracket_star_charge() {
         let Reading { root, trace } = read("C-[*+]").unwrap();
-        let atoms = from_tree(root);
+        let atoms = from_tree(root).unwrap();
         let result = to_node(1, &atoms, &trace);
 
         assert_eq!(result, Err(Error::ChargedStar(2)))
@@ -213,7 +215,7 @@ mod tests {
     #[test]
     fn lithium_dication() {
         let Reading { root, trace } = read("C-[Li+2]").unwrap();
-        let atoms = from_tree(root);
+        let atoms = from_tree(root).unwrap();
         let result = to_node(1, &atoms, &trace);
 
         assert_eq!(result, Err(Error::Valence(2)))
@@ -222,7 +224,7 @@ mod tests {
     #[test]
     fn carbon_h5() {
         let Reading { root, trace } = read("C-[CH5]").unwrap();
-        let atoms = from_tree(root);
+        let atoms = from_tree(root).unwrap();
         let result = to_node(1, &atoms, &trace);
 
         assert_eq!(result, Err(Error::Valence(2)))
@@ -231,7 +233,7 @@ mod tests {
     #[test]
     fn carbon_5() {
         let Reading { root, trace } = read("C-[5C]").unwrap();
-        let atoms = from_tree(root);
+        let atoms = from_tree(root).unwrap();
         let result = to_node(1, &atoms, &trace);
 
         assert_eq!(result, Err(Error::Isotope(2)))
@@ -240,7 +242,7 @@ mod tests {
     #[test]
     fn carbon_dioxide_parity() {
         let Reading { root, trace } = read("[C@](=O)=O").unwrap();
-        let atoms = from_tree(root);
+        let atoms = from_tree(root).unwrap();
         let result = to_node(0, &atoms, &trace);
 
         assert_eq!(result, Err(Error::Parity(0)))
@@ -249,7 +251,7 @@ mod tests {
     #[test]
     fn bare_star() {
         let Reading { root, trace } = read("C*").unwrap();
-        let atoms = from_tree(root);
+        let atoms = from_tree(root).unwrap();
         let result = to_node(1, &atoms, &trace);
 
         assert_eq!(result, Ok(Node {
@@ -267,7 +269,7 @@ mod tests {
     #[test]
     fn aromatic_carbon() {
         let Reading { root, trace } = read("Cc").unwrap();
-        let atoms = from_tree(root);
+        let atoms = from_tree(root).unwrap();
         let result = to_node(1, &atoms, &trace);
 
         assert_eq!(result, Ok(Node {
@@ -285,7 +287,7 @@ mod tests {
     #[test]
     fn aliphatic_carbon() {
         let Reading { root, trace } = read("CC").unwrap();
-        let atoms = from_tree(root);
+        let atoms = from_tree(root).unwrap();
         let result = to_node(1, &atoms, &trace);
 
         assert_eq!(result, Ok(Node {
@@ -303,7 +305,7 @@ mod tests {
     #[test]
     fn bracket_star() {
         let Reading { root, trace } = read("C[*]").unwrap();
-        let atoms = from_tree(root);
+        let atoms = from_tree(root).unwrap();
         let result = to_node(1, &atoms, &trace);
 
         assert_eq!(result, Ok(Node {
@@ -321,7 +323,7 @@ mod tests {
     #[test]
     fn bracket_star_12() {
         let Reading { root, trace } = read("[12*]").unwrap();
-        let atoms = from_tree(root);
+        let atoms = from_tree(root).unwrap();
         let result = to_node(0, &atoms, &trace);
 
         assert_eq!(result, Ok(Node {
@@ -339,7 +341,7 @@ mod tests {
     #[test]
     fn bracket_methane() {
         let Reading { root, trace } = read("[CH4]").unwrap();
-        let atoms = from_tree(root);
+        let atoms = from_tree(root).unwrap();
         let result = to_node(0, &atoms, &trace);
 
         assert_eq!(result, Ok(Node {
@@ -357,7 +359,7 @@ mod tests {
     #[test]
     fn bracket_methyl_cation() {
         let Reading { root, trace } = read("[CH3+]").unwrap();
-        let atoms = from_tree(root);
+        let atoms = from_tree(root).unwrap();
         let result = to_node(0, &atoms, &trace);
 
         assert_eq!(result, Ok(Node {
@@ -375,7 +377,7 @@ mod tests {
     #[test]
     fn bracket_methyl_anion() {
         let Reading { root, trace } = read("[CH3-]").unwrap();
-        let atoms = from_tree(root);
+        let atoms = from_tree(root).unwrap();
         let result = to_node(0, &atoms, &trace);
 
         assert_eq!(result, Ok(Node {
@@ -394,7 +396,7 @@ mod tests {
     fn bracket_carbon_12() {
         let Reading { root, trace } = read("[12C]").unwrap();
         let atoms = from_tree(root);
-        let result = to_node(0, &atoms, &trace);
+        let result = to_node(0, &atoms.unwrap(), &trace);
 
         assert_eq!(result, Ok(Node {
             atom: Atom {
@@ -412,7 +414,7 @@ mod tests {
     fn bracket_star_parity() {
         let Reading { root, trace } = read("C[*@](F)(Cl)I").unwrap();
         let atoms = from_tree(root);
-        let result = to_node(1, &atoms, &trace);
+        let result = to_node(1, &atoms.unwrap(), &trace);
 
         assert_eq!(result, Ok(Node {
             atom: Atom {
@@ -434,7 +436,7 @@ mod tests {
     #[test]
     fn bracket_carbon_single_single_single_single() {
         let Reading { root, trace } = read("C[C@](F)(Cl)I").unwrap();
-        let atoms = from_tree(root);
+        let atoms = from_tree(root).unwrap();
         let result = to_node(1, &atoms, &trace);
 
         assert_eq!(result, Ok(Node {
@@ -447,6 +449,29 @@ mod tests {
             },
             bonds: vec![
                 Bond::new(2, None, 0),
+                Bond::new(2, None, 2),
+                Bond::new(2, None, 3),
+                Bond::new(2, None, 4)
+            ]
+        }))
+    }
+
+    #[test]
+    fn negative_boron_tetravalent() {
+        let Reading { root, trace } = read("[B-](C)(C)(C)C").unwrap();
+        let atoms = from_tree(root).unwrap();
+        let result = to_node(0, &atoms, &trace);
+
+        assert_eq!(result, Ok(Node {
+            atom: Atom {
+                element: Some(Element::B),
+                isotope: None,
+                electrons: 0,
+                hydrogens: 0,
+                parity: None
+            },
+            bonds: vec![
+                Bond::new(2, None, 1),
                 Bond::new(2, None, 2),
                 Bond::new(2, None, 3),
                 Bond::new(2, None, 4)
