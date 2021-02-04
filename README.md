@@ -10,7 +10,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-chemcore = "0.4.0"
+chemcore = "0.4"
 ```
 
 # Examples
