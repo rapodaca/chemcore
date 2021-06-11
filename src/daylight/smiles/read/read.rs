@@ -1,22 +1,21 @@
 use std::collections::HashMap;
 
-use purr::read::{ read as read_tree, Reading };
+use purr::graph::{from_tree, Error as GraphError};
 use purr::parts;
-use purr::graph::{ from_tree, Error as GraphError };
+use purr::read::{read as read_tree, Reading};
 
-use crate::molecule::{ DefaultMolecule };
-use super::{ to_node, kekulize, Error };
+use super::{kekulize, to_node, Error};
+use crate::molecule::DefaultMolecule;
 
-pub fn read(
-    smiles: &str, map: Option<&mut HashMap<usize, u16>>
-) -> Result<DefaultMolecule, Error> {
+pub fn read(smiles: &str, map: Option<&mut HashMap<usize, u16>>) -> Result<DefaultMolecule, Error> {
     let Reading { root, trace } = read_tree(smiles)?;
     let mut atoms = match from_tree(root) {
         Ok(atoms) => atoms,
         Err(error) => match error {
-            GraphError::IncompatibleJoin(first, second) =>
+            GraphError::IncompatibleJoin(first, second) => {
                 return Err(Error::IncompatibleJoin(trace[first], trace[second]))
-        }
+            }
+        },
     };
 
     kekulize(&mut atoms)?;
@@ -42,9 +41,9 @@ pub fn read(
 
 #[cfg(test)]
 mod tests {
-    use pretty_assertions::assert_eq;
-    use crate::molecule::{ Node, Atom, Bond, Element, Parity };
     use super::*;
+    use crate::molecule::{Atom, Bond, Element, Node, Parity};
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn invalid_character() {
@@ -82,188 +81,206 @@ mod tests {
 
         read("C-[C:42]", Some(&mut map)).unwrap();
 
-        assert_eq!(map, vec![ (1, 42) ].into_iter().collect::<HashMap<_,_>>())
+        assert_eq!(map, vec![(1, 42)].into_iter().collect::<HashMap<_, _>>())
     }
 
     #[test]
     fn organic_star() {
-        assert_eq!(read("C*", None), Ok(DefaultMolecule::new(vec![
-            Node {
-                atom: Atom {
-                    element: Some(Element::C),
-                    electrons: 0,
-                    hydrogens: 3,
-                    isotope: None,
-                    parity: None
+        assert_eq!(
+            read("C*", None),
+            Ok(DefaultMolecule::new(vec![
+                Node {
+                    atom: Atom {
+                        element: Some(Element::C),
+                        electrons: 0,
+                        hydrogens: 3,
+                        isotope: None,
+                        parity: None
+                    },
+                    bonds: vec![Bond::new(2, None, 1)]
                 },
-                bonds: vec![ Bond::new(2, None, 1) ]
-            },
-            Node {
-                atom: Atom {
-                    element: None,
-                    electrons: 0,
-                    hydrogens: 0,
-                    isotope: None,
-                    parity: None
+                Node {
+                    atom: Atom {
+                        element: None,
+                        electrons: 0,
+                        hydrogens: 0,
+                        isotope: None,
+                        parity: None
+                    },
+                    bonds: vec![Bond::new(2, None, 0)]
                 },
-                bonds: vec![ Bond::new(2, None, 0) ]
-            },
-        ])))
+            ]))
+        )
     }
 
     #[test]
     fn bracket_star() {
-        assert_eq!(read("C[*]", None), Ok(DefaultMolecule::new(vec![
-            Node {
-                atom: Atom {
-                    element: Some(Element::C),
-                    electrons: 0,
-                    hydrogens: 3,
-                    isotope: None,
-                    parity: None
+        assert_eq!(
+            read("C[*]", None),
+            Ok(DefaultMolecule::new(vec![
+                Node {
+                    atom: Atom {
+                        element: Some(Element::C),
+                        electrons: 0,
+                        hydrogens: 3,
+                        isotope: None,
+                        parity: None
+                    },
+                    bonds: vec![Bond::new(2, None, 1)]
                 },
-                bonds: vec![ Bond::new(2, None, 1) ]
-            },
-            Node {
-                atom: Atom {
-                    element: None,
-                    electrons: 0,
-                    hydrogens: 0,
-                    isotope: None,
-                    parity: None
+                Node {
+                    atom: Atom {
+                        element: None,
+                        electrons: 0,
+                        hydrogens: 0,
+                        isotope: None,
+                        parity: None
+                    },
+                    bonds: vec![Bond::new(2, None, 0)]
                 },
-                bonds: vec![ Bond::new(2, None, 0) ]
-            },
-        ])))
+            ]))
+        )
     }
 
     #[test]
     fn ethane() {
-        assert_eq!(read("CC", None), Ok(DefaultMolecule::new(vec![
-            Node {
-                atom: Atom {
-                    element: Some(Element::C),
-                    electrons: 0,
-                    hydrogens: 3,
-                    isotope: None,
-                    parity: None
+        assert_eq!(
+            read("CC", None),
+            Ok(DefaultMolecule::new(vec![
+                Node {
+                    atom: Atom {
+                        element: Some(Element::C),
+                        electrons: 0,
+                        hydrogens: 3,
+                        isotope: None,
+                        parity: None
+                    },
+                    bonds: vec![Bond::new(2, None, 1)]
                 },
-                bonds: vec![ Bond::new(2, None, 1) ]
-            },
-            Node {
-                atom: Atom {
-                    element: Some(Element::C),
-                    electrons: 0,
-                    hydrogens: 3,
-                    isotope: None,
-                    parity: None
+                Node {
+                    atom: Atom {
+                        element: Some(Element::C),
+                        electrons: 0,
+                        hydrogens: 3,
+                        isotope: None,
+                        parity: None
+                    },
+                    bonds: vec![Bond::new(2, None, 0)]
                 },
-                bonds: vec![ Bond::new(2, None, 0) ]
-            },
-        ])))
+            ]))
+        )
     }
 
     #[test]
     fn ethene_aromatic_atoms() {
-        assert_eq!(read("cc", None), Ok(DefaultMolecule::new(vec![
-            Node {
-                atom: Atom {
-                    element: Some(Element::C),
-                    electrons: 0,
-                    hydrogens: 2,
-                    isotope: None,
-                    parity: None
+        assert_eq!(
+            read("cc", None),
+            Ok(DefaultMolecule::new(vec![
+                Node {
+                    atom: Atom {
+                        element: Some(Element::C),
+                        electrons: 0,
+                        hydrogens: 2,
+                        isotope: None,
+                        parity: None
+                    },
+                    bonds: vec![Bond::new(4, None, 1)]
                 },
-                bonds: vec![ Bond::new(4, None, 1) ]
-            },
-            Node {
-                atom: Atom {
-                    element: Some(Element::C),
-                    electrons: 0,
-                    hydrogens: 2,
-                    isotope: None,
-                    parity: None
+                Node {
+                    atom: Atom {
+                        element: Some(Element::C),
+                        electrons: 0,
+                        hydrogens: 2,
+                        isotope: None,
+                        parity: None
+                    },
+                    bonds: vec![Bond::new(4, None, 0)]
                 },
-                bonds: vec![ Bond::new(4, None, 0) ]
-            },
-        ])))
+            ]))
+        )
     }
 
     #[test]
     fn ethene_aromatic_bond() {
-        assert_eq!(read("C:C", None), Ok(DefaultMolecule::new(vec![
-            Node {
-                atom: Atom {
-                    element: Some(Element::C),
-                    electrons: 0,
-                    hydrogens: 2,
-                    isotope: None,
-                    parity: None
+        assert_eq!(
+            read("C:C", None),
+            Ok(DefaultMolecule::new(vec![
+                Node {
+                    atom: Atom {
+                        element: Some(Element::C),
+                        electrons: 0,
+                        hydrogens: 2,
+                        isotope: None,
+                        parity: None
+                    },
+                    bonds: vec![Bond::new(4, None, 1)]
                 },
-                bonds: vec![ Bond::new(4, None, 1) ]
-            },
-            Node {
-                atom: Atom {
-                    element: Some(Element::C),
-                    electrons: 0,
-                    hydrogens: 2,
-                    isotope: None,
-                    parity: None
+                Node {
+                    atom: Atom {
+                        element: Some(Element::C),
+                        electrons: 0,
+                        hydrogens: 2,
+                        isotope: None,
+                        parity: None
+                    },
+                    bonds: vec![Bond::new(4, None, 0)]
                 },
-                bonds: vec![ Bond::new(4, None, 0) ]
-            },
-        ])))
+            ]))
+        )
     }
 
     #[test]
     fn trans_butene() {
-        assert_eq!(read("C/C=C/C", None), Ok(DefaultMolecule::new(vec![
-            Node {
-                atom: Atom {
-                    element: Some(Element::C),
-                    electrons: 0,
-                    hydrogens: 3,
-                    isotope: None,
-                    parity: None
+        assert_eq!(
+            read("C/C=C/C", None),
+            Ok(DefaultMolecule::new(vec![
+                Node {
+                    atom: Atom {
+                        element: Some(Element::C),
+                        electrons: 0,
+                        hydrogens: 3,
+                        isotope: None,
+                        parity: None
+                    },
+                    bonds: vec![Bond::new(2, None, 1)]
                 },
-                bonds: vec![ Bond::new(2, None, 1) ]
-            },
-            Node {
-                atom: Atom {
-                    element: Some(Element::C),
-                    electrons: 0,
-                    hydrogens: 1,
-                    isotope: None,
-                    parity: None
+                Node {
+                    atom: Atom {
+                        element: Some(Element::C),
+                        electrons: 0,
+                        hydrogens: 1,
+                        isotope: None,
+                        parity: None
+                    },
+                    bonds: vec![
+                        Bond::new(2, None, 0),
+                        Bond::new(4, Some(Parity::Negative), 2)
+                    ]
                 },
-                bonds: vec![
-                    Bond::new(2, None, 0),
-                    Bond::new(4, Some(Parity::Negative), 2)
-                ]
-            },
-            Node {
-                atom: Atom {
-                    element: Some(Element::C),
-                    electrons: 0,
-                    hydrogens: 1,
-                    isotope: None,
-                    parity: None
+                Node {
+                    atom: Atom {
+                        element: Some(Element::C),
+                        electrons: 0,
+                        hydrogens: 1,
+                        isotope: None,
+                        parity: None
+                    },
+                    bonds: vec![
+                        Bond::new(4, Some(Parity::Negative), 1),
+                        Bond::new(2, None, 3)
+                    ]
                 },
-                bonds: vec![
-                    Bond::new(4, Some(Parity::Negative), 1),
-                    Bond::new(2, None, 3)
-                ]
-            },
-            Node {
-                atom: Atom {
-                    element: Some(Element::C),
-                    electrons: 0,
-                    hydrogens: 3,
-                    isotope: None,
-                    parity: None
-                },
-                bonds: vec![ Bond::new(2, None, 2) ]
-            }
-        ])))
+                Node {
+                    atom: Atom {
+                        element: Some(Element::C),
+                        electrons: 0,
+                        hydrogens: 3,
+                        isotope: None,
+                        parity: None
+                    },
+                    bonds: vec![Bond::new(2, None, 2)]
+                }
+            ]))
+        )
     }
 }

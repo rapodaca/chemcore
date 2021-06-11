@@ -1,10 +1,10 @@
-use gamma::graph::{ Graph, Error as GraphError };
-use super::{ Node, Molecule, Atom };
+use super::{Atom, Molecule, Node};
+use gamma::graph::{Error as GraphError, Graph};
 
-#[derive(Debug,PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct DefaultMolecule {
     nodes: Vec<Node>,
-    size: usize
+    size: usize,
 }
 
 impl DefaultMolecule {
@@ -15,14 +15,14 @@ impl DefaultMolecule {
 
         DefaultMolecule {
             nodes,
-            size: size / 2
+            size: size / 2,
         }
     }
 
     fn node_for(&self, id: usize) -> Result<&Node, GraphError> {
         match self.nodes.get(id) {
             Some(node) => Ok(node),
-            None => Err(GraphError::UnknownId(id))
+            None => Err(GraphError::UnknownId(id)),
         }
     }
 }
@@ -40,13 +40,11 @@ impl Graph for DefaultMolecule {
         self.size
     }
 
-    fn ids(&self) -> Box<dyn Iterator<Item=usize> + '_> {
+    fn ids(&self) -> Box<dyn Iterator<Item = usize> + '_> {
         Box::new(0..self.nodes.len())
     }
 
-    fn neighbors(
-        &self, id: usize
-    ) -> Result<Box<dyn Iterator<Item=usize> + '_>, GraphError> {
+    fn neighbors(&self, id: usize) -> Result<Box<dyn Iterator<Item = usize> + '_>, GraphError> {
         let node = self.node_for(id)?;
 
         Ok(Box::new(node.bonds.iter().map(|bond| bond.tid)))
@@ -60,7 +58,7 @@ impl Graph for DefaultMolecule {
         Ok(self.node_for(id)?.bonds.len())
     }
 
-    fn edges(&self) -> Box<dyn Iterator<Item=(usize, usize)> + '_> {
+    fn edges(&self) -> Box<dyn Iterator<Item = (usize, usize)> + '_> {
         // let mut result = Vec::new();
 
         // for (sid, node) in self.nodes.iter().enumerate() {
@@ -95,15 +93,13 @@ impl Molecule for DefaultMolecule {
         let node = self.node_for(id)?;
         let element = match &node.atom.element {
             Some(element) => element,
-            None => return Ok(0f32)
+            None => return Ok(0f32),
         };
 
         let mut result = element.valence_electrons() as f32;
 
         result -= node.atom.hydrogens as f32;
-        result -= node.bonds.iter().fold(0f32, |sum, bond| {
-            sum + bond.order()
-        });
+        result -= node.bonds.iter().fold(0f32, |sum, bond| sum + bond.order());
         result -= node.atom.electrons as f32;
 
         Ok(result)
@@ -113,12 +109,12 @@ impl Molecule for DefaultMolecule {
         let source = self.node_for(sid)?;
 
         if tid >= self.nodes.len() {
-            return Err(GraphError::UnknownId(tid))
+            return Err(GraphError::UnknownId(tid));
         }
 
         match source.bonds.iter().find(|bond| bond.tid == tid) {
             Some(bond) => Ok(bond.order()),
-            None => Ok(0f32)
+            None => Ok(0f32),
         }
     }
 }
@@ -126,7 +122,7 @@ impl Molecule for DefaultMolecule {
 struct EdgeIterator<'a> {
     nodes: &'a Vec<Node>,
     row: usize,
-    col: usize
+    col: usize,
 }
 
 impl<'a> EdgeIterator<'a> {
@@ -134,7 +130,7 @@ impl<'a> EdgeIterator<'a> {
         Self {
             nodes,
             row: 0,
-            col: 0
+            col: 0,
         }
     }
 }
@@ -150,15 +146,15 @@ impl<'a> Iterator for EdgeIterator<'a> {
                         self.col += 1;
 
                         if bond.tid > self.row {
-                            break Some((self.row, bond.tid))
+                            break Some((self.row, bond.tid));
                         }
-                    },
+                    }
                     None => {
                         self.col = 0;
                         self.row += 1
                     }
                 },
-                None => break None
+                None => break None,
             }
         }
     }
@@ -166,21 +162,22 @@ impl<'a> Iterator for EdgeIterator<'a> {
 
 #[cfg(test)]
 mod is_empty {
-    use pretty_assertions::assert_eq;
     use super::*;
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn empty() {
-        let molecule = DefaultMolecule::new(vec![ ]);
+        let molecule = DefaultMolecule::new(vec![]);
 
         assert_eq!(molecule.is_empty(), true)
     }
 
     #[test]
     fn one_atom() {
-        let molecule = DefaultMolecule::new(vec![
-            Node { atom: Atom::default(), bonds: vec![ ] }
-        ]);
+        let molecule = DefaultMolecule::new(vec![Node {
+            atom: Atom::default(),
+            bonds: vec![],
+        }]);
 
         assert_eq!(molecule.is_empty(), false)
     }
@@ -188,21 +185,22 @@ mod is_empty {
 
 #[cfg(test)]
 mod order {
-    use pretty_assertions::assert_eq;
     use super::*;
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn empty() {
-        let molecule = DefaultMolecule::new(vec![ ]);
+        let molecule = DefaultMolecule::new(vec![]);
 
         assert_eq!(molecule.order(), 0)
     }
 
     #[test]
     fn one_atom() {
-        let molecule = DefaultMolecule::new(vec![
-            Node { atom: Atom::default(), bonds: vec![ ] }
-        ]);
+        let molecule = DefaultMolecule::new(vec![Node {
+            atom: Atom::default(),
+            bonds: vec![],
+        }]);
 
         assert_eq!(molecule.order(), 1)
     }
@@ -210,13 +208,13 @@ mod order {
 
 #[cfg(test)]
 mod size {
-    use pretty_assertions::assert_eq;
-    use super::super::{ Bond };
+    use super::super::Bond;
     use super::*;
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn empty() {
-        let molecule = DefaultMolecule::new(vec![ ]);
+        let molecule = DefaultMolecule::new(vec![]);
 
         assert_eq!(molecule.size(), 0)
     }
@@ -224,12 +222,14 @@ mod size {
     #[test]
     fn one_edge() {
         let molecule = DefaultMolecule::new(vec![
-            Node { atom: Atom::default(), bonds: vec![
-                Bond::new(2, None, 1)
-            ]},
-            Node { atom: Atom::default(), bonds: vec![
-                Bond::new(2, None, 0)
-            ]}
+            Node {
+                atom: Atom::default(),
+                bonds: vec![Bond::new(2, None, 1)],
+            },
+            Node {
+                atom: Atom::default(),
+                bonds: vec![Bond::new(2, None, 0)],
+            },
         ]);
 
         assert_eq!(molecule.size(), 1)
@@ -238,37 +238,46 @@ mod size {
 
 #[cfg(test)]
 mod nodes {
-    use pretty_assertions::assert_eq;
     use super::*;
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn empty() {
-        let molecule = DefaultMolecule::new(vec![ ]);
+        let molecule = DefaultMolecule::new(vec![]);
 
-        assert_eq!(molecule.ids().collect::<Vec<_>>(), [ ])
+        assert_eq!(molecule.ids().collect::<Vec<_>>(), [])
     }
 
     #[test]
     fn three_atoms() {
         let molecule = DefaultMolecule::new(vec![
-            Node { atom: Atom::default(), bonds: vec![ ] },
-            Node { atom: Atom::default(), bonds: vec![ ] },
-            Node { atom: Atom::default(), bonds: vec![ ] }
+            Node {
+                atom: Atom::default(),
+                bonds: vec![],
+            },
+            Node {
+                atom: Atom::default(),
+                bonds: vec![],
+            },
+            Node {
+                atom: Atom::default(),
+                bonds: vec![],
+            },
         ]);
 
-        assert_eq!(molecule.ids().collect::<Vec<_>>(), [ 0, 1, 2 ])
+        assert_eq!(molecule.ids().collect::<Vec<_>>(), [0, 1, 2])
     }
 }
 
 #[cfg(test)]
 mod neighbors {
-    use pretty_assertions::assert_eq;
-    use super::super::{ Bond };
+    use super::super::Bond;
     use super::*;
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn unknown_id() {
-        let molecule = DefaultMolecule::new(vec![ ]);
+        let molecule = DefaultMolecule::new(vec![]);
 
         assert_eq!(molecule.neighbors(0).err(), Some(GraphError::UnknownId(0)))
     }
@@ -276,39 +285,42 @@ mod neighbors {
     #[test]
     fn known_id() {
         let molecule = DefaultMolecule::new(vec![
-            Node { atom: Atom::default(), bonds: vec![
-                Bond::new(2, None, 1),
-                Bond::new(2, None, 2)
-            ]},
-            Node { atom: Atom::default(), bonds: vec![
-                Bond::new(2, None, 0)
-            ]},
-            Node { atom: Atom::default(), bonds: vec![
-                Bond::new(2, None, 0)
-            ]}
+            Node {
+                atom: Atom::default(),
+                bonds: vec![Bond::new(2, None, 1), Bond::new(2, None, 2)],
+            },
+            Node {
+                atom: Atom::default(),
+                bonds: vec![Bond::new(2, None, 0)],
+            },
+            Node {
+                atom: Atom::default(),
+                bonds: vec![Bond::new(2, None, 0)],
+            },
         ]);
 
-        assert_eq!(molecule.neighbors(0).unwrap().collect::<Vec<_>>(), [ 1, 2 ])
+        assert_eq!(molecule.neighbors(0).unwrap().collect::<Vec<_>>(), [1, 2])
     }
 }
 
 #[cfg(test)]
 mod has_node {
-    use pretty_assertions::assert_eq;
     use super::*;
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn unknown_id() {
-        let molecule = DefaultMolecule::new(vec![ ]);
+        let molecule = DefaultMolecule::new(vec![]);
 
         assert_eq!(molecule.has_id(0), false)
     }
 
     #[test]
     fn known_id() {
-        let molecule = DefaultMolecule::new(vec![
-            Node { atom: Atom::default(), bonds: vec![ ] }
-        ]);
+        let molecule = DefaultMolecule::new(vec![Node {
+            atom: Atom::default(),
+            bonds: vec![],
+        }]);
 
         assert_eq!(molecule.has_id(0), true)
     }
@@ -316,13 +328,13 @@ mod has_node {
 
 #[cfg(test)]
 mod degree {
-    use pretty_assertions::assert_eq;
-    use super::super::{ Node, Bond };
+    use super::super::{Bond, Node};
     use super::*;
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn unknown_id() {
-        let molecule = DefaultMolecule::new(vec![ ]);
+        let molecule = DefaultMolecule::new(vec![]);
 
         assert_eq!(molecule.degree(0), Err(GraphError::UnknownId(0)))
     }
@@ -330,16 +342,18 @@ mod degree {
     #[test]
     fn known_id() {
         let molecule = DefaultMolecule::new(vec![
-            Node { atom: Atom::default(), bonds: vec![
-                Bond::new(2, None, 1),
-                Bond::new(2, None, 2)
-            ]},
-            Node { atom: Atom::default(), bonds: vec![
-                Bond::new(2, None, 0)
-            ]},
-            Node { atom: Atom::default(), bonds: vec![
-                Bond::new(2, None, 0)
-            ]}
+            Node {
+                atom: Atom::default(),
+                bonds: vec![Bond::new(2, None, 1), Bond::new(2, None, 2)],
+            },
+            Node {
+                atom: Atom::default(),
+                bonds: vec![Bond::new(2, None, 0)],
+            },
+            Node {
+                atom: Atom::default(),
+                bonds: vec![Bond::new(2, None, 0)],
+            },
         ]);
 
         assert_eq!(molecule.degree(0), Ok(2))
@@ -348,64 +362,74 @@ mod degree {
 
 #[cfg(test)]
 mod edges {
-    use pretty_assertions::assert_eq;
-    use super::super::{ Bond };
+    use super::super::Bond;
     use super::*;
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn methane() {
-        let molecule = DefaultMolecule::new(vec![
-            Node { atom: Atom::default(), bonds: vec![ ] }
-        ]);
+        let molecule = DefaultMolecule::new(vec![Node {
+            atom: Atom::default(),
+            bonds: vec![],
+        }]);
 
-        assert_eq!(molecule.edges().collect::<Vec<_>>(), [ ])
+        assert_eq!(molecule.edges().collect::<Vec<_>>(), [])
     }
 
     #[test]
     fn trimethylboron() {
         let molecule = DefaultMolecule::new(vec![
-            Node { atom: Atom::default(), bonds: vec![
-                Bond::new(2, None, 1),
-                Bond::new(2, None, 2),
-                Bond::new(2, None, 3)
-            ]},
-            Node { atom: Atom::default(), bonds: vec![
-                Bond::new(2, None, 0)
-            ]},
-            Node { atom: Atom::default(), bonds: vec![
-                Bond::new(2, None, 0)
-            ]},
-            Node { atom: Atom::default(), bonds: vec![
-                Bond::new(2, None, 0)
-            ]}
+            Node {
+                atom: Atom::default(),
+                bonds: vec![
+                    Bond::new(2, None, 1),
+                    Bond::new(2, None, 2),
+                    Bond::new(2, None, 3),
+                ],
+            },
+            Node {
+                atom: Atom::default(),
+                bonds: vec![Bond::new(2, None, 0)],
+            },
+            Node {
+                atom: Atom::default(),
+                bonds: vec![Bond::new(2, None, 0)],
+            },
+            Node {
+                atom: Atom::default(),
+                bonds: vec![Bond::new(2, None, 0)],
+            },
         ]);
 
-        assert_eq!(molecule.edges().collect::<Vec<_>>(), [
-            (0, 1), (0, 2), (0, 3)
-        ])
+        assert_eq!(
+            molecule.edges().collect::<Vec<_>>(),
+            [(0, 1), (0, 2), (0, 3)]
+        )
     }
 }
 
 #[cfg(test)]
 mod has_edge {
-    use pretty_assertions::assert_eq;
-    use super::super::{ Bond };
+    use super::super::Bond;
     use super::*;
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn unknown_sid() {
-        let molecule = DefaultMolecule::new(vec![
-            Node { atom: Atom::default(), bonds: vec![ ] }
-        ]);
+        let molecule = DefaultMolecule::new(vec![Node {
+            atom: Atom::default(),
+            bonds: vec![],
+        }]);
 
         assert_eq!(molecule.has_edge(1, 0), Err(GraphError::UnknownId(1)))
     }
 
     #[test]
     fn unknown_tid() {
-        let molecule = DefaultMolecule::new(vec![
-            Node { atom: Atom::default(), bonds: vec![ ]}
-        ]);
+        let molecule = DefaultMolecule::new(vec![Node {
+            atom: Atom::default(),
+            bonds: vec![],
+        }]);
 
         assert_eq!(molecule.has_edge(0, 1), Err(GraphError::UnknownId(1)))
     }
@@ -413,8 +437,14 @@ mod has_edge {
     #[test]
     fn no_bond() {
         let molecule = DefaultMolecule::new(vec![
-            Node { atom: Atom::default(), bonds: vec![ ] },
-            Node { atom: Atom::default(), bonds: vec![ ] }
+            Node {
+                atom: Atom::default(),
+                bonds: vec![],
+            },
+            Node {
+                atom: Atom::default(),
+                bonds: vec![],
+            },
         ]);
 
         assert_eq!(molecule.has_edge(0, 1), Ok(false))
@@ -423,8 +453,14 @@ mod has_edge {
     #[test]
     fn bond() {
         let molecule = DefaultMolecule::new(vec![
-            Node { atom: Atom::default(), bonds: vec![ Bond::new(2, None, 1)] },
-            Node { atom: Atom::default(), bonds: vec![ Bond::new(2, None, 0)] }
+            Node {
+                atom: Atom::default(),
+                bonds: vec![Bond::new(2, None, 1)],
+            },
+            Node {
+                atom: Atom::default(),
+                bonds: vec![Bond::new(2, None, 0)],
+            },
         ]);
 
         assert_eq!(molecule.has_edge(0, 1), Ok(true))
@@ -433,52 +469,53 @@ mod has_edge {
 
 #[cfg(test)]
 mod atom {
-    use pretty_assertions::assert_eq;
-    use crate::molecule::{ Element };
     use super::*;
+    use crate::molecule::Element;
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn unknown_id() {
-        let molecule = DefaultMolecule::new(vec![ ]);
+        let molecule = DefaultMolecule::new(vec![]);
 
         assert_eq!(molecule.atom(0), Err(GraphError::UnknownId(0)))
     }
 
     #[test]
     fn methane() {
-        let molecule = DefaultMolecule::new(vec![
-            Node {
-                atom: Atom {
-                    isotope: None,
-                    element: Some(Element::C),
-                    hydrogens: 4,
-                    electrons: 0,
-                    parity: None,
-                },
-                bonds: vec![ ]
-            }
-        ]);
+        let molecule = DefaultMolecule::new(vec![Node {
+            atom: Atom {
+                isotope: None,
+                element: Some(Element::C),
+                hydrogens: 4,
+                electrons: 0,
+                parity: None,
+            },
+            bonds: vec![],
+        }]);
 
-        assert_eq!(molecule.atom(0), Ok(&Atom {
-            isotope: None,
-            element: Some(Element::C),
-            hydrogens: 4,
-            electrons: 0,
-            parity: None,
-        }))
+        assert_eq!(
+            molecule.atom(0),
+            Ok(&Atom {
+                isotope: None,
+                element: Some(Element::C),
+                hydrogens: 4,
+                electrons: 0,
+                parity: None,
+            })
+        )
     }
 }
 
 #[cfg(test)]
 mod charge {
-    use pretty_assertions::assert_eq;
-    use crate::molecule::{ Element, Bond };
     use super::*;
+    use crate::molecule::{Bond, Element};
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn unkown_id() {
-        let molecule = DefaultMolecule::new(vec![ ]);
-    
+        let molecule = DefaultMolecule::new(vec![]);
+
         assert_eq!(molecule.charge(0), Err(GraphError::UnknownId(0)))
     }
 
@@ -493,7 +530,7 @@ mod charge {
                     electrons: 0,
                     parity: None,
                 },
-                bonds: vec![ Bond::new(2, None, 1)]
+                bonds: vec![Bond::new(2, None, 1)],
             },
             Node {
                 atom: Atom {
@@ -503,8 +540,8 @@ mod charge {
                     electrons: 0,
                     parity: None,
                 },
-                bonds: vec![ Bond::new(2, None, 0)]
-            }
+                bonds: vec![Bond::new(2, None, 0)],
+            },
         ]);
 
         assert_eq!(molecule.charge(1), Ok(1f32))
@@ -521,7 +558,7 @@ mod charge {
                     electrons: 0,
                     parity: None,
                 },
-                bonds: vec![ Bond::new(2, None, 1)]
+                bonds: vec![Bond::new(2, None, 1)],
             },
             Node {
                 atom: Atom {
@@ -531,8 +568,8 @@ mod charge {
                     electrons: 2,
                     parity: None,
                 },
-                bonds: vec![ Bond::new(2, None, 0)]
-            }
+                bonds: vec![Bond::new(2, None, 0)],
+            },
         ]);
 
         assert_eq!(molecule.charge(1), Ok(-1f32))
@@ -541,24 +578,26 @@ mod charge {
 
 #[cfg(test)]
 mod bond_order {
-    use pretty_assertions::assert_eq;
-    use crate::molecule::{ Element, Bond };
     use super::*;
+    use crate::molecule::{Bond, Element};
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn unknown_sid() {
-        let molecule = DefaultMolecule::new(vec![
-            Node { atom: Atom::default(), bonds: vec![ ] }
-        ]);
+        let molecule = DefaultMolecule::new(vec![Node {
+            atom: Atom::default(),
+            bonds: vec![],
+        }]);
 
         assert_eq!(molecule.bond_order(1, 0), Err(GraphError::UnknownId(1)))
     }
 
     #[test]
     fn unknown_tid() {
-        let molecule = DefaultMolecule::new(vec![
-            Node { atom: Atom::default(), bonds: vec![ ] }
-        ]);
+        let molecule = DefaultMolecule::new(vec![Node {
+            atom: Atom::default(),
+            bonds: vec![],
+        }]);
 
         assert_eq!(molecule.bond_order(0, 1), Err(GraphError::UnknownId(1)))
     }
@@ -566,8 +605,14 @@ mod bond_order {
     #[test]
     fn no_bond() {
         let molecule = DefaultMolecule::new(vec![
-            Node { atom: Atom::default(), bonds: vec![ ] },
-            Node { atom: Atom::default(), bonds: vec![ ] }
+            Node {
+                atom: Atom::default(),
+                bonds: vec![],
+            },
+            Node {
+                atom: Atom::default(),
+                bonds: vec![],
+            },
         ]);
 
         assert_eq!(molecule.bond_order(0, 1), Ok(0f32))
@@ -584,7 +629,7 @@ mod bond_order {
                     electrons: 0,
                     parity: None,
                 },
-                bonds: vec![ Bond::new(2, None, 1)]
+                bonds: vec![Bond::new(2, None, 1)],
             },
             Node {
                 atom: Atom {
@@ -594,8 +639,8 @@ mod bond_order {
                     electrons: 0,
                     parity: None,
                 },
-                bonds: vec![ Bond::new(2, None, 0)]
-            }
+                bonds: vec![Bond::new(2, None, 0)],
+            },
         ]);
 
         assert_eq!(molecule.bond_order(0, 1), Ok(1f32))
@@ -612,7 +657,7 @@ mod bond_order {
                     electrons: 0,
                     parity: None,
                 },
-                bonds: vec![ Bond::new(1, None, 1)]
+                bonds: vec![Bond::new(1, None, 1)],
             },
             Node {
                 atom: Atom {
@@ -622,8 +667,8 @@ mod bond_order {
                     electrons: 0,
                     parity: None,
                 },
-                bonds: vec![ Bond::new(1, None, 0)]
-            }
+                bonds: vec![Bond::new(1, None, 0)],
+            },
         ]);
 
         assert_eq!(molecule.bond_order(0, 1), Ok(0.5f32))

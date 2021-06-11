@@ -1,10 +1,10 @@
 use super::Parity;
 
-#[derive(Debug,PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct Bond {
     pub electrons: u8,
     pub parity: Option<Parity>,
-    pub tid: usize
+    pub tid: usize,
 }
 
 impl Bond {
@@ -12,7 +12,7 @@ impl Bond {
         Self {
             electrons,
             parity,
-            tid
+            tid,
         }
     }
 

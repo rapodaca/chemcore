@@ -1,5 +1,5 @@
-use gamma::graph::{ Graph, Error };
-use super::{ Atom };
+use super::Atom;
+use gamma::graph::{Error, Graph};
 
 pub trait Molecule: Graph {
     /// Returns the atomic attributes associated with id,
