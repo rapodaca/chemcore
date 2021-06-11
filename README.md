@@ -1,5 +1,8 @@
 # ChemCore
 
+[![Crates.io](https://img.shields.io/crates/v/chemcore)](https://crates.io/crates/chemcore)
+[![Docs](https://docs.rs/chemcore/badge.svg)](https://docs.rs/chemcore)
+
 A cheminformatics toolkit for Rust.
 
 ChemCore provides primitives for working with Molecules. For details, see: *[ChemCore: A Cheminformatics Toolkit for Rust](https://depth-first.com/articles/2020/06/01/chemcore-a-cheminformatics-toolkit-for-rust/)*.
