@@ -1,39 +1,37 @@
-use purr::graph::{ Bond };
-use purr::parts::{ BondKind };
+use purr::graph::Bond;
+use purr::parts::BondKind;
 
-use crate::molecule::{ Parity };
+use crate::molecule::Parity;
 
 fn is_directional(kind: &BondKind) -> bool {
     kind == &BondKind::Up || kind == &BondKind::Down
 }
 
-pub fn trigonal_parity(
-    bonds: &[Bond]
-) -> Result<Option<Parity>, ()> {
+pub fn trigonal_parity(bonds: &[Bond]) -> Result<Option<Parity>, ()> {
     if bonds.len() > 3 {
-        return Ok(None)
+        return Ok(None);
     }
-    
+
     let first = match bonds.get(0) {
         Some(first) => &first.kind,
-        None => return Ok(None)
+        None => return Ok(None),
     };
     let second = match bonds.get(1) {
         Some(second) => &second.kind,
-        None => return Ok(None)
+        None => return Ok(None),
     };
     let third = match bonds.get(2) {
         Some(third) => Some(&third.kind),
-        None => None
+        None => None,
     };
 
     if !is_directional(first) && !is_directional(second) {
         if let Some(third) = third {
             if !is_directional(third) {
-                return Ok(None)
+                return Ok(None);
             }
         } else {
-            return Ok(None)
+            return Ok(None);
         }
     }
 
@@ -42,81 +40,78 @@ pub fn trigonal_parity(
             BondKind::Elided => match third {
                 Some(BondKind::Up) => Ok(Some(Parity::Positive)),
                 Some(BondKind::Down) => Ok(Some(Parity::Negative)),
-                _ => unreachable!()
+                _ => unreachable!(),
             },
             BondKind::Down => match third {
-                None |
-                Some(BondKind::Up) |
-                Some(BondKind::Elided) =>  Ok(Some(Parity::Positive)),
-                _ => Err(())
+                None | Some(BondKind::Up) | Some(BondKind::Elided) => {
+                    Ok(Some(Parity::Positive))
+                }
+                _ => Err(()),
             },
             BondKind::Up => match third {
-                None |
-                Some(BondKind::Down) |
-                Some(BondKind::Elided) => Ok(Some(Parity::Negative)),
-                _ => Err(())
+                None | Some(BondKind::Down) | Some(BondKind::Elided) => {
+                    Ok(Some(Parity::Negative))
+                }
+                _ => Err(()),
             },
-            _ => Err(())
+            _ => Err(()),
         },
         BondKind::Up => match second {
             BondKind::Double => match third {
-                None |
-                Some(BondKind::Down) |
-                Some(BondKind::Elided) => Ok(Some(Parity::Positive)),
-                _ => Err(())
+                None | Some(BondKind::Down) | Some(BondKind::Elided) => {
+                    Ok(Some(Parity::Positive))
+                }
+                _ => Err(()),
             },
-            BondKind::Down |
-            BondKind::Elided => match third {
+            BondKind::Down | BondKind::Elided => match third {
                 Some(BondKind::Double) => Ok(Some(Parity::Negative)),
-                _ => Err(())
+                _ => Err(()),
             },
-            _ => Err(())
+            _ => Err(()),
         },
         BondKind::Down => match second {
             BondKind::Double => match third {
-                None |
-                Some(BondKind::Elided) |
-                Some(BondKind::Up) => Ok(Some(Parity::Negative)),
-                _ => Err(())
+                None | Some(BondKind::Elided) | Some(BondKind::Up) => {
+                    Ok(Some(Parity::Negative))
+                }
+                _ => Err(()),
             },
-            BondKind::Up |
-            BondKind::Elided => match third {
+            BondKind::Up | BondKind::Elided => match third {
                 Some(BondKind::Double) => Ok(Some(Parity::Positive)),
-                _ => Err(())
+                _ => Err(()),
             },
-            _ => Err(())
+            _ => Err(()),
         },
         BondKind::Elided => match second {
             BondKind::Up => match third {
                 Some(BondKind::Double) => Ok(Some(Parity::Positive)),
-                _ => Err(())
+                _ => Err(()),
             },
             BondKind::Down => match third {
                 Some(BondKind::Double) => Ok(Some(Parity::Negative)),
-                _ => Err(())
+                _ => Err(()),
             },
             BondKind::Double => match third {
                 Some(BondKind::Up) => Ok(Some(Parity::Negative)),
                 Some(BondKind::Down) => Ok(Some(Parity::Positive)),
-                _ => Ok(None)
+                _ => Ok(None),
             },
-            _ => Err(())
+            _ => Err(()),
         },
-        _ => unreachable!()
+        _ => unreachable!(),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
+
     use super::*;
 
     #[test]
     fn double_up() {
-        let bonds = vec![
-            Bond::new(BondKind::Double, 0),
-            Bond::new(BondKind::Up, 1)
-        ];
+        let bonds =
+            vec![Bond::new(BondKind::Double, 0), Bond::new(BondKind::Up, 1)];
 
         assert_eq!(trigonal_parity(&bonds), Ok(Some(Parity::Negative)))
     }
@@ -126,7 +121,7 @@ mod tests {
         let bonds = vec![
             Bond::new(BondKind::Double, 0),
             Bond::new(BondKind::Elided, 1),
-            Bond::new(BondKind::Up, 2)
+            Bond::new(BondKind::Up, 2),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(Some(Parity::Positive)))
@@ -138,7 +133,7 @@ mod tests {
             Bond::new(BondKind::Double, 0),
             Bond::new(BondKind::Elided, 1),
             Bond::new(BondKind::Up, 2),
-            Bond::new(BondKind::Elided, 3)
+            Bond::new(BondKind::Elided, 3),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(None))
@@ -146,10 +141,8 @@ mod tests {
 
     #[test]
     fn double_down() {
-        let bonds = vec![
-            Bond::new(BondKind::Double, 0),
-            Bond::new(BondKind::Down, 1)
-        ];
+        let bonds =
+            vec![Bond::new(BondKind::Double, 0), Bond::new(BondKind::Down, 1)];
 
         assert_eq!(trigonal_parity(&bonds), Ok(Some(Parity::Positive)))
     }
@@ -159,7 +152,7 @@ mod tests {
         let bonds = vec![
             Bond::new(BondKind::Double, 0),
             Bond::new(BondKind::Down, 1),
-            Bond::new(BondKind::Elided, 2)
+            Bond::new(BondKind::Elided, 2),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(Some(Parity::Positive)))
@@ -171,7 +164,7 @@ mod tests {
             Bond::new(BondKind::Double, 0),
             Bond::new(BondKind::Down, 1),
             Bond::new(BondKind::Elided, 2),
-            Bond::new(BondKind::Elided, 3)
+            Bond::new(BondKind::Elided, 3),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(None))
@@ -182,7 +175,7 @@ mod tests {
         let bonds = vec![
             Bond::new(BondKind::Double, 0),
             Bond::new(BondKind::Down, 1),
-            Bond::new(BondKind::Up, 2)
+            Bond::new(BondKind::Up, 2),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(Some(Parity::Positive)))
@@ -194,7 +187,7 @@ mod tests {
             Bond::new(BondKind::Double, 0),
             Bond::new(BondKind::Down, 1),
             Bond::new(BondKind::Up, 2),
-            Bond::new(BondKind::Elided, 3)
+            Bond::new(BondKind::Elided, 3),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(None))
@@ -205,7 +198,7 @@ mod tests {
         let bonds = vec![
             Bond::new(BondKind::Double, 0),
             Bond::new(BondKind::Down, 1),
-            Bond::new(BondKind::Single, 2)
+            Bond::new(BondKind::Single, 2),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Err(()))
@@ -216,7 +209,7 @@ mod tests {
         let bonds = vec![
             Bond::new(BondKind::Double, 0),
             Bond::new(BondKind::Elided, 1),
-            Bond::new(BondKind::Down, 2)
+            Bond::new(BondKind::Down, 2),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(Some(Parity::Negative)))
@@ -227,7 +220,7 @@ mod tests {
         let bonds = vec![
             Bond::new(BondKind::Double, 0),
             Bond::new(BondKind::Elided, 1),
-            Bond::new(BondKind::Elided, 2)
+            Bond::new(BondKind::Elided, 2),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(None))
@@ -239,7 +232,7 @@ mod tests {
             Bond::new(BondKind::Double, 0),
             Bond::new(BondKind::Elided, 1),
             Bond::new(BondKind::Down, 2),
-            Bond::new(BondKind::Elided, 3)
+            Bond::new(BondKind::Elided, 3),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(None))
@@ -250,7 +243,7 @@ mod tests {
         let bonds = vec![
             Bond::new(BondKind::Double, 0),
             Bond::new(BondKind::Up, 1),
-            Bond::new(BondKind::Down, 2)
+            Bond::new(BondKind::Down, 2),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(Some(Parity::Negative)))
@@ -262,7 +255,7 @@ mod tests {
             Bond::new(BondKind::Double, 0),
             Bond::new(BondKind::Up, 1),
             Bond::new(BondKind::Down, 2),
-            Bond::new(BondKind::Elided, 3)
+            Bond::new(BondKind::Elided, 3),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(None))
@@ -273,7 +266,7 @@ mod tests {
         let bonds = vec![
             Bond::new(BondKind::Double, 0),
             Bond::new(BondKind::Up, 1),
-            Bond::new(BondKind::Elided, 2)
+            Bond::new(BondKind::Elided, 2),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(Some(Parity::Negative)))
@@ -285,7 +278,7 @@ mod tests {
             Bond::new(BondKind::Double, 0),
             Bond::new(BondKind::Up, 1),
             Bond::new(BondKind::Elided, 2),
-            Bond::new(BondKind::Elided, 3)
+            Bond::new(BondKind::Elided, 3),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(None))
@@ -296,7 +289,7 @@ mod tests {
         let bonds = vec![
             Bond::new(BondKind::Double, 0),
             Bond::new(BondKind::Up, 1),
-            Bond::new(BondKind::Single, 2)
+            Bond::new(BondKind::Single, 2),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Err(()))
@@ -306,7 +299,7 @@ mod tests {
     fn double_single() {
         let bonds = vec![
             Bond::new(BondKind::Double, 0),
-            Bond::new(BondKind::Single, 1)
+            Bond::new(BondKind::Single, 1),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(None))
@@ -317,7 +310,7 @@ mod tests {
         let bonds = vec![
             Bond::new(BondKind::Double, 0),
             Bond::new(BondKind::Single, 1),
-            Bond::new(BondKind::Up, 2)
+            Bond::new(BondKind::Up, 2),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Err(()))
@@ -327,10 +320,8 @@ mod tests {
 
     #[test]
     fn up_double() {
-        let bonds = vec![
-            Bond::new(BondKind::Up, 0),
-            Bond::new(BondKind::Double, 1)
-        ];
+        let bonds =
+            vec![Bond::new(BondKind::Up, 0), Bond::new(BondKind::Double, 1)];
 
         assert_eq!(trigonal_parity(&bonds), Ok(Some(Parity::Positive)))
     }
@@ -340,7 +331,7 @@ mod tests {
         let bonds = vec![
             Bond::new(BondKind::Up, 0),
             Bond::new(BondKind::Double, 1),
-            Bond::new(BondKind::Elided, 2)
+            Bond::new(BondKind::Elided, 2),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(Some(Parity::Positive)))
@@ -352,7 +343,7 @@ mod tests {
             Bond::new(BondKind::Up, 0),
             Bond::new(BondKind::Double, 1),
             Bond::new(BondKind::Elided, 2),
-            Bond::new(BondKind::Elided, 3)
+            Bond::new(BondKind::Elided, 3),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(None))
@@ -363,7 +354,7 @@ mod tests {
         let bonds = vec![
             Bond::new(BondKind::Up, 0),
             Bond::new(BondKind::Double, 1),
-            Bond::new(BondKind::Single, 2)
+            Bond::new(BondKind::Single, 2),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Err(()))
@@ -374,7 +365,7 @@ mod tests {
         let bonds = vec![
             Bond::new(BondKind::Up, 0),
             Bond::new(BondKind::Double, 1),
-            Bond::new(BondKind::Down, 2)
+            Bond::new(BondKind::Down, 2),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(Some(Parity::Positive)))
@@ -386,7 +377,7 @@ mod tests {
             Bond::new(BondKind::Up, 0),
             Bond::new(BondKind::Double, 1),
             Bond::new(BondKind::Down, 2),
-            Bond::new(BondKind::Elided, 3)
+            Bond::new(BondKind::Elided, 3),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(None))
@@ -394,10 +385,8 @@ mod tests {
 
     #[test]
     fn up_down() {
-        let bonds = vec![
-            Bond::new(BondKind::Up, 0),
-            Bond::new(BondKind::Down, 1)
-        ];
+        let bonds =
+            vec![Bond::new(BondKind::Up, 0), Bond::new(BondKind::Down, 1)];
 
         assert_eq!(trigonal_parity(&bonds), Err(()))
     }
@@ -407,7 +396,7 @@ mod tests {
         let bonds = vec![
             Bond::new(BondKind::Up, 0),
             Bond::new(BondKind::Down, 1),
-            Bond::new(BondKind::Elided, 2)
+            Bond::new(BondKind::Elided, 2),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Err(()))
@@ -418,7 +407,7 @@ mod tests {
         let bonds = vec![
             Bond::new(BondKind::Up, 0),
             Bond::new(BondKind::Down, 1),
-            Bond::new(BondKind::Double, 2)
+            Bond::new(BondKind::Double, 2),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(Some(Parity::Negative)))
@@ -430,7 +419,7 @@ mod tests {
             Bond::new(BondKind::Up, 0),
             Bond::new(BondKind::Down, 1),
             Bond::new(BondKind::Double, 2),
-            Bond::new(BondKind::Elided, 3)
+            Bond::new(BondKind::Elided, 3),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(None))
@@ -441,7 +430,7 @@ mod tests {
         let bonds = vec![
             Bond::new(BondKind::Up, 0),
             Bond::new(BondKind::Down, 1),
-            Bond::new(BondKind::Single, 2)
+            Bond::new(BondKind::Single, 2),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Err(()))
@@ -449,10 +438,8 @@ mod tests {
 
     #[test]
     fn up_elided() {
-        let bonds = vec![
-            Bond::new(BondKind::Up, 0),
-            Bond::new(BondKind::Elided, 1)
-        ];
+        let bonds =
+            vec![Bond::new(BondKind::Up, 0), Bond::new(BondKind::Elided, 1)];
 
         assert_eq!(trigonal_parity(&bonds), Err(()))
     }
@@ -462,7 +449,7 @@ mod tests {
         let bonds = vec![
             Bond::new(BondKind::Up, 0),
             Bond::new(BondKind::Elided, 1),
-            Bond::new(BondKind::Double, 2)
+            Bond::new(BondKind::Double, 2),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(Some(Parity::Negative)))
@@ -474,7 +461,7 @@ mod tests {
             Bond::new(BondKind::Up, 0),
             Bond::new(BondKind::Elided, 1),
             Bond::new(BondKind::Double, 2),
-            Bond::new(BondKind::Elided, 3)
+            Bond::new(BondKind::Elided, 3),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(None))
@@ -485,7 +472,7 @@ mod tests {
         let bonds = vec![
             Bond::new(BondKind::Up, 0),
             Bond::new(BondKind::Elided, 1),
-            Bond::new(BondKind::Single, 2)
+            Bond::new(BondKind::Single, 2),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Err(()))
@@ -493,10 +480,8 @@ mod tests {
 
     #[test]
     fn up_single() {
-        let bonds = vec![
-            Bond::new(BondKind::Up, 0),
-            Bond::new(BondKind::Single, 1)
-        ];
+        let bonds =
+            vec![Bond::new(BondKind::Up, 0), Bond::new(BondKind::Single, 1)];
 
         assert_eq!(trigonal_parity(&bonds), Err(()))
     }
@@ -505,10 +490,8 @@ mod tests {
 
     #[test]
     fn down_double() {
-        let bonds = vec![
-            Bond::new(BondKind::Down, 0),
-            Bond::new(BondKind::Double, 1)
-        ];
+        let bonds =
+            vec![Bond::new(BondKind::Down, 0), Bond::new(BondKind::Double, 1)];
 
         assert_eq!(trigonal_parity(&bonds), Ok(Some(Parity::Negative)))
     }
@@ -518,7 +501,7 @@ mod tests {
         let bonds = vec![
             Bond::new(BondKind::Down, 0),
             Bond::new(BondKind::Double, 1),
-            Bond::new(BondKind::Elided, 2)
+            Bond::new(BondKind::Elided, 2),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(Some(Parity::Negative)))
@@ -530,7 +513,7 @@ mod tests {
             Bond::new(BondKind::Down, 0),
             Bond::new(BondKind::Double, 1),
             Bond::new(BondKind::Elided, 2),
-            Bond::new(BondKind::Elided, 3)
+            Bond::new(BondKind::Elided, 3),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(None))
@@ -541,7 +524,7 @@ mod tests {
         let bonds = vec![
             Bond::new(BondKind::Down, 0),
             Bond::new(BondKind::Double, 1),
-            Bond::new(BondKind::Up, 2)
+            Bond::new(BondKind::Up, 2),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(Some(Parity::Negative)))
@@ -553,7 +536,7 @@ mod tests {
             Bond::new(BondKind::Down, 0),
             Bond::new(BondKind::Double, 1),
             Bond::new(BondKind::Up, 2),
-            Bond::new(BondKind::Elided, 3)
+            Bond::new(BondKind::Elided, 3),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(None))
@@ -564,7 +547,7 @@ mod tests {
         let bonds = vec![
             Bond::new(BondKind::Down, 0),
             Bond::new(BondKind::Double, 1),
-            Bond::new(BondKind::Single, 2)
+            Bond::new(BondKind::Single, 2),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Err(()))
@@ -572,10 +555,8 @@ mod tests {
 
     #[test]
     fn down_up() {
-        let bonds = vec![
-            Bond::new(BondKind::Down, 0),
-            Bond::new(BondKind::Up, 1)
-        ];
+        let bonds =
+            vec![Bond::new(BondKind::Down, 0), Bond::new(BondKind::Up, 1)];
 
         assert_eq!(trigonal_parity(&bonds), Err(()))
     }
@@ -585,7 +566,7 @@ mod tests {
         let bonds = vec![
             Bond::new(BondKind::Down, 0),
             Bond::new(BondKind::Up, 1),
-            Bond::new(BondKind::Elided, 2)
+            Bond::new(BondKind::Elided, 2),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Err(()))
@@ -596,7 +577,7 @@ mod tests {
         let bonds = vec![
             Bond::new(BondKind::Down, 0),
             Bond::new(BondKind::Up, 1),
-            Bond::new(BondKind::Double, 2)
+            Bond::new(BondKind::Double, 2),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(Some(Parity::Positive)))
@@ -608,7 +589,7 @@ mod tests {
             Bond::new(BondKind::Down, 0),
             Bond::new(BondKind::Up, 1),
             Bond::new(BondKind::Double, 2),
-            Bond::new(BondKind::Elided, 3)
+            Bond::new(BondKind::Elided, 3),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(None))
@@ -619,7 +600,7 @@ mod tests {
         let bonds = vec![
             Bond::new(BondKind::Down, 0),
             Bond::new(BondKind::Up, 1),
-            Bond::new(BondKind::Single, 2)
+            Bond::new(BondKind::Single, 2),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Err(()))
@@ -627,10 +608,8 @@ mod tests {
 
     #[test]
     fn down_elided() {
-        let bonds = vec![
-            Bond::new(BondKind::Down, 0),
-            Bond::new(BondKind::Elided, 1)
-        ];
+        let bonds =
+            vec![Bond::new(BondKind::Down, 0), Bond::new(BondKind::Elided, 1)];
 
         assert_eq!(trigonal_parity(&bonds), Err(()))
     }
@@ -640,7 +619,7 @@ mod tests {
         let bonds = vec![
             Bond::new(BondKind::Down, 0),
             Bond::new(BondKind::Elided, 1),
-            Bond::new(BondKind::Double, 2)
+            Bond::new(BondKind::Double, 2),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(Some(Parity::Positive)))
@@ -652,7 +631,7 @@ mod tests {
             Bond::new(BondKind::Down, 0),
             Bond::new(BondKind::Elided, 1),
             Bond::new(BondKind::Double, 2),
-            Bond::new(BondKind::Elided, 3)
+            Bond::new(BondKind::Elided, 3),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(None))
@@ -663,7 +642,7 @@ mod tests {
         let bonds = vec![
             Bond::new(BondKind::Down, 0),
             Bond::new(BondKind::Elided, 1),
-            Bond::new(BondKind::Single, 2)
+            Bond::new(BondKind::Single, 2),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Err(()))
@@ -671,10 +650,8 @@ mod tests {
 
     #[test]
     fn down_single() {
-        let bonds = vec![
-            Bond::new(BondKind::Down, 0),
-            Bond::new(BondKind::Single, 1)
-        ];
+        let bonds =
+            vec![Bond::new(BondKind::Down, 0), Bond::new(BondKind::Single, 1)];
 
         assert_eq!(trigonal_parity(&bonds), Err(()))
     }
@@ -683,10 +660,8 @@ mod tests {
 
     #[test]
     fn elided_up() {
-        let bonds = vec![
-            Bond::new(BondKind::Elided, 0),
-            Bond::new(BondKind::Up, 1)
-        ];
+        let bonds =
+            vec![Bond::new(BondKind::Elided, 0), Bond::new(BondKind::Up, 1)];
 
         assert_eq!(trigonal_parity(&bonds), Err(()))
     }
@@ -696,7 +671,7 @@ mod tests {
         let bonds = vec![
             Bond::new(BondKind::Elided, 0),
             Bond::new(BondKind::Up, 1),
-            Bond::new(BondKind::Double, 2)
+            Bond::new(BondKind::Double, 2),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(Some(Parity::Positive)))
@@ -708,7 +683,7 @@ mod tests {
             Bond::new(BondKind::Elided, 0),
             Bond::new(BondKind::Up, 1),
             Bond::new(BondKind::Double, 2),
-            Bond::new(BondKind::Elided, 3)
+            Bond::new(BondKind::Elided, 3),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(None))
@@ -719,7 +694,7 @@ mod tests {
         let bonds = vec![
             Bond::new(BondKind::Elided, 0),
             Bond::new(BondKind::Up, 1),
-            Bond::new(BondKind::Single, 2)
+            Bond::new(BondKind::Single, 2),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Err(()))
@@ -727,10 +702,8 @@ mod tests {
 
     #[test]
     fn elided_down() {
-        let bonds = vec![
-            Bond::new(BondKind::Elided, 0),
-            Bond::new(BondKind::Down, 1)
-        ];
+        let bonds =
+            vec![Bond::new(BondKind::Elided, 0), Bond::new(BondKind::Down, 1)];
 
         assert_eq!(trigonal_parity(&bonds), Err(()))
     }
@@ -740,7 +713,7 @@ mod tests {
         let bonds = vec![
             Bond::new(BondKind::Elided, 0),
             Bond::new(BondKind::Down, 1),
-            Bond::new(BondKind::Double, 2)
+            Bond::new(BondKind::Double, 2),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(Some(Parity::Negative)))
@@ -752,7 +725,7 @@ mod tests {
             Bond::new(BondKind::Elided, 0),
             Bond::new(BondKind::Down, 1),
             Bond::new(BondKind::Double, 2),
-            Bond::new(BondKind::Elided, 3)
+            Bond::new(BondKind::Elided, 3),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(None))
@@ -763,7 +736,7 @@ mod tests {
         let bonds = vec![
             Bond::new(BondKind::Elided, 0),
             Bond::new(BondKind::Down, 1),
-            Bond::new(BondKind::Single, 2)
+            Bond::new(BondKind::Single, 2),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Err(()))
@@ -773,7 +746,7 @@ mod tests {
     fn elided_double() {
         let bonds = vec![
             Bond::new(BondKind::Elided, 0),
-            Bond::new(BondKind::Double, 1)
+            Bond::new(BondKind::Double, 1),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(None))
@@ -784,7 +757,7 @@ mod tests {
         let bonds = vec![
             Bond::new(BondKind::Elided, 0),
             Bond::new(BondKind::Double, 1),
-            Bond::new(BondKind::Up, 2)
+            Bond::new(BondKind::Up, 2),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(Some(Parity::Negative)))
@@ -796,7 +769,7 @@ mod tests {
             Bond::new(BondKind::Elided, 0),
             Bond::new(BondKind::Double, 1),
             Bond::new(BondKind::Up, 2),
-            Bond::new(BondKind::Elided, 3)
+            Bond::new(BondKind::Elided, 3),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(None))
@@ -807,7 +780,7 @@ mod tests {
         let bonds = vec![
             Bond::new(BondKind::Elided, 0),
             Bond::new(BondKind::Double, 1),
-            Bond::new(BondKind::Down, 2)
+            Bond::new(BondKind::Down, 2),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(Some(Parity::Positive)))
@@ -819,7 +792,7 @@ mod tests {
             Bond::new(BondKind::Elided, 0),
             Bond::new(BondKind::Double, 1),
             Bond::new(BondKind::Down, 2),
-            Bond::new(BondKind::Elided, 3)
+            Bond::new(BondKind::Elided, 3),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(None))
@@ -840,7 +813,7 @@ mod tests {
     fn elided_single() {
         let bonds = vec![
             Bond::new(BondKind::Elided, 0),
-            Bond::new(BondKind::Single, 1)
+            Bond::new(BondKind::Single, 1),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(None))
@@ -851,7 +824,7 @@ mod tests {
         let bonds = vec![
             Bond::new(BondKind::Elided, 0),
             Bond::new(BondKind::Single, 1),
-            Bond::new(BondKind::Up, 2)
+            Bond::new(BondKind::Up, 2),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Err(()))
@@ -862,7 +835,7 @@ mod tests {
         let bonds = vec![
             Bond::new(BondKind::Elided, 0),
             Bond::new(BondKind::Single, 1),
-            Bond::new(BondKind::Down, 2)
+            Bond::new(BondKind::Down, 2),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Err(()))
@@ -874,7 +847,7 @@ mod tests {
             Bond::new(BondKind::Elided, 0),
             Bond::new(BondKind::Single, 1),
             Bond::new(BondKind::Single, 2),
-            Bond::new(BondKind::Down, 3)
+            Bond::new(BondKind::Down, 3),
         ];
 
         assert_eq!(trigonal_parity(&bonds), Ok(None))

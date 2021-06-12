@@ -1,7 +1,7 @@
-use super::{ Atom, Bond };
+use super::{Atom, Bond};
 
-#[derive(Debug,PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct Node {
     pub atom: Atom,
-    pub bonds: Vec<Bond>
+    pub bonds: Vec<Bond>,
 }

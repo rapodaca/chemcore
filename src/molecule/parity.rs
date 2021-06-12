@@ -1,9 +1,9 @@
 use purr::parts;
 
-#[derive(Debug,PartialEq,Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Parity {
     Positive,
-    Negative
+    Negative,
 }
 
 impl Into<Parity> for &parts::Parity {
@@ -11,7 +11,7 @@ impl Into<Parity> for &parts::Parity {
         match self {
             parts::Parity::Clockwise => Parity::Positive,
             parts::Parity::Counterclockwise => Parity::Negative,
-            _ => unimplemented!("unsupported parity")
+            _ => unimplemented!("unsupported parity"),
         }
     }
 }
@@ -20,7 +20,7 @@ impl Parity {
     pub fn negate(&self) -> Parity {
         match self {
             Parity::Positive => Parity::Negative,
-            Parity::Negative => Parity::Positive
+            Parity::Negative => Parity::Positive,
         }
     }
 

@@ -1,6 +1,6 @@
 use purr::read::Error as PurrError;
 
-#[derive(Debug,PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum Error {
     Character(usize),
     BondKind(usize),
@@ -10,14 +10,14 @@ pub enum Error {
     ChargedStar(usize),
     IncompatibleJoin(usize, usize),
     Kekulization,
-    EndOfLine
+    EndOfLine,
 }
 
 impl From<PurrError> for Error {
     fn from(error: PurrError) -> Self {
         match error {
             PurrError::InvalidCharacter(cursor) => Error::Character(cursor),
-            PurrError::EndOfLine => Error::EndOfLine
+            PurrError::EndOfLine => Error::EndOfLine,
         }
     }
 }

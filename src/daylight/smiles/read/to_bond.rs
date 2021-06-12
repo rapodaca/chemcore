@@ -1,33 +1,32 @@
-use purr::{ graph };
+use purr::graph;
 use purr::parts::BondKind;
 
-use crate::molecule::{ Bond };
-use super::{ Error, trigonal_parity };
+use super::{trigonal_parity, Error};
+use crate::molecule::Bond;
 
 pub fn to_bond(
     sid: usize,
     bond: &graph::Bond,
     atoms: &[graph::Atom],
-    trace: &[usize]
+    trace: &[usize],
 ) -> Result<Bond, Error> {
     let (electrons, parity) = match &bond.kind {
-        BondKind::Elided |
-        BondKind::Aromatic |
-        BondKind::Single => (2, None),
-        BondKind::Up |
-        BondKind::Down => if has_double(sid, bond, atoms) {
-            (2, None)
-        } else {
-            return Err(Error::BondKind(trace[bond.tid]))
-        },
+        BondKind::Elided | BondKind::Aromatic | BondKind::Single => (2, None),
+        BondKind::Up | BondKind::Down => {
+            if has_double(sid, bond, atoms) {
+                (2, None)
+            } else {
+                return Err(Error::BondKind(trace[bond.tid]));
+            }
+        }
         BondKind::Double => {
             let left_parity = match trigonal_parity(&atoms[sid].bonds) {
                 Ok(parity) => parity,
-                Err(()) => return Err(Error::BondKind(trace[sid]))
+                Err(()) => return Err(Error::BondKind(trace[sid])),
             };
             let right_parity = match trigonal_parity(&atoms[bond.tid].bonds) {
                 Ok(parity) => parity,
-                Err(()) => return Err(Error::BondKind(trace[bond.tid]))
+                Err(()) => return Err(Error::BondKind(trace[bond.tid])),
             };
 
             if let Some(left) = left_parity {
@@ -41,37 +40,45 @@ pub fn to_bond(
             } else {
                 (4, None)
             }
-        },
+        }
         BondKind::Triple => (6, None),
-        BondKind::Quadruple => (8, None)
+        BondKind::Quadruple => (8, None),
     };
 
     Ok(Bond {
         electrons,
         parity,
-        tid: bond.tid
+        tid: bond.tid,
     })
 }
 
 fn has_double(sid: usize, bond: &graph::Bond, atoms: &[graph::Atom]) -> bool {
     let source = &atoms[sid];
 
-    if source.bonds.iter().any(|bond| bond.kind == BondKind::Double) {
-        return true
+    if source
+        .bonds
+        .iter()
+        .any(|bond| bond.kind == BondKind::Double)
+    {
+        return true;
     }
 
     let target = &atoms[bond.tid];
 
-    target.bonds.iter().any(|bond| bond.kind == BondKind::Double)
+    target
+        .bonds
+        .iter()
+        .any(|bond| bond.kind == BondKind::Double)
 }
 
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
-    use purr::read::{ Reading, read };
-    use purr::graph::{ from_tree, Bond as PurrBond };
-    use crate::molecule::Parity;
+    use purr::graph::{from_tree, Bond as PurrBond};
+    use purr::read::{read, Reading};
+
     use super::*;
+    use crate::molecule::Parity;
 
     #[test]
     fn elided() {

@@ -1,8 +1,9 @@
-use purr::graph::Atom;
-use purr::parts::{ BondKind };
 use gamma::graph::Graph;
-use gamma::matching::{ greedy, maximum_matching };
-use super::{ pi_subgraph, Error };
+use gamma::matching::{greedy, maximum_matching};
+use purr::graph::Atom;
+use purr::parts::BondKind;
+
+use super::{pi_subgraph, Error};
 
 pub fn kekulize(atoms: &mut Vec<Atom>) -> Result<(), Error> {
     let pi = pi_subgraph(atoms);
@@ -11,7 +12,7 @@ pub fn kekulize(atoms: &mut Vec<Atom>) -> Result<(), Error> {
     maximum_matching(&pi, &mut pairing);
 
     if pairing.order() != pi.order() {
-        return Err(Error::Kekulization)
+        return Err(Error::Kekulization);
     }
 
     let mut bonds = Vec::new();
@@ -23,9 +24,12 @@ pub fn kekulize(atoms: &mut Vec<Atom>) -> Result<(), Error> {
 
     for (sid, tid) in bonds {
         let source = &mut atoms[sid];
-        let bond = source.bonds.iter_mut()
-            .find(|bond| bond.tid == tid).expect("target bond");
-        
+        let bond = source
+            .bonds
+            .iter_mut()
+            .find(|bond| bond.tid == tid)
+            .expect("target bond");
+
         bond.kind = BondKind::Double;
     }
 
@@ -35,9 +39,10 @@ pub fn kekulize(atoms: &mut Vec<Atom>) -> Result<(), Error> {
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
+    use purr::graph::{from_tree, Atom, Bond};
+    use purr::parts::{Aromatic, AtomKind};
     use purr::read::read;
-    use purr::parts::{ AtomKind, Aromatic };
-    use purr::graph::{ from_tree, Atom, Bond };
+
     use super::*;
 
     #[test]
@@ -62,49 +67,52 @@ mod tests {
 
         kekulize(&mut atoms).unwrap();
 
-        assert_eq!(atoms, vec![
-            Atom {
-                kind: AtomKind::Aromatic(Aromatic::C),
-                bonds: vec![
-                    Bond::new(BondKind::Double, 5),
-                    Bond::new(BondKind::Elided, 1)
-                ]
-            },
-            Atom {
-                kind: AtomKind::Aromatic(Aromatic::C),
-                bonds: vec![
-                    Bond::new(BondKind::Elided, 0),
-                    Bond::new(BondKind::Double, 2)
-                ]
-            },
-            Atom {
-                kind: AtomKind::Aromatic(Aromatic::C),
-                bonds: vec![
-                    Bond::new(BondKind::Double, 1),
-                    Bond::new(BondKind::Elided, 3)
-                ]
-            },
-            Atom {
-                kind: AtomKind::Aromatic(Aromatic::C),
-                bonds: vec![
-                    Bond::new(BondKind::Elided, 2),
-                    Bond::new(BondKind::Double, 4)
-                ]
-            },
-            Atom {
-                kind: AtomKind::Aromatic(Aromatic::C),
-                bonds: vec![
-                    Bond::new(BondKind::Double, 3),
-                    Bond::new(BondKind::Elided, 5)
-                ]
-            },
-            Atom {
-                kind: AtomKind::Aromatic(Aromatic::C),
-                bonds: vec![
-                    Bond::new(BondKind::Elided, 4),
-                    Bond::new(BondKind::Double, 0)
-                ]
-            }
-        ])
+        assert_eq!(
+            atoms,
+            vec![
+                Atom {
+                    kind: AtomKind::Aromatic(Aromatic::C),
+                    bonds: vec![
+                        Bond::new(BondKind::Double, 5),
+                        Bond::new(BondKind::Elided, 1)
+                    ]
+                },
+                Atom {
+                    kind: AtomKind::Aromatic(Aromatic::C),
+                    bonds: vec![
+                        Bond::new(BondKind::Elided, 0),
+                        Bond::new(BondKind::Double, 2)
+                    ]
+                },
+                Atom {
+                    kind: AtomKind::Aromatic(Aromatic::C),
+                    bonds: vec![
+                        Bond::new(BondKind::Double, 1),
+                        Bond::new(BondKind::Elided, 3)
+                    ]
+                },
+                Atom {
+                    kind: AtomKind::Aromatic(Aromatic::C),
+                    bonds: vec![
+                        Bond::new(BondKind::Elided, 2),
+                        Bond::new(BondKind::Double, 4)
+                    ]
+                },
+                Atom {
+                    kind: AtomKind::Aromatic(Aromatic::C),
+                    bonds: vec![
+                        Bond::new(BondKind::Double, 3),
+                        Bond::new(BondKind::Elided, 5)
+                    ]
+                },
+                Atom {
+                    kind: AtomKind::Aromatic(Aromatic::C),
+                    bonds: vec![
+                        Bond::new(BondKind::Elided, 4),
+                        Bond::new(BondKind::Double, 0)
+                    ]
+                }
+            ]
+        )
     }
 }

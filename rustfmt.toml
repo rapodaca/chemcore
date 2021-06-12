@@ -1,0 +1,3 @@
+max_width = 80
+group_imports = "StdExternalCrate"
+reorder_modules = true
